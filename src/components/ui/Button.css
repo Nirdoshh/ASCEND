@@ -1,0 +1,131 @@
+/* Button --------------------------------------------------------------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+
+  /* 44px minimum height on every variant: this is the WCAG 2.2 AA
+   * target size, and it is also simply a better tap target on a phone. */
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-5);
+
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  text-align: center;
+  text-decoration: none;
+
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-instant) var(--ease-standard);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.55;
+}
+
+.button--full {
+  width: 100%;
+}
+
+.button--lg {
+  min-height: calc(var(--tap-min) + var(--space-2));
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-lg);
+}
+
+.button__label {
+  display: inline-block;
+}
+
+/* Primary: one per screen. The dominant action the user came for. */
+.button--primary {
+  background-color: var(--color-accent);
+  color: var(--text-on-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.button--primary:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.button--primary:active:not(:disabled) {
+  background-color: var(--color-accent-active);
+}
+
+/* Secondary: real action, but not the reason the user opened the app. */
+.button--secondary {
+  background-color: var(--surface-raised);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.button--secondary:hover:not(:disabled) {
+  background-color: var(--surface-sunken);
+  border-color: var(--border-strong);
+}
+
+/* Quiet: tertiary. Present and reachable, but visually recessive. */
+.button--quiet {
+  background-color: transparent;
+  color: var(--color-accent-text);
+  padding-inline: var(--space-3);
+}
+
+.button--quiet:hover:not(:disabled) {
+  background-color: var(--color-accent-subtle);
+}
+
+/* Danger: destructive, never the default choice, never on Today. */
+.button--danger {
+  background-color: var(--color-danger);
+  color: #ffffff;
+}
+
+.button--danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+/* Loading --------------------------------------------------------------
+ * We animate a ring rather than swapping in an icon so the button keeps
+ * its width. A button that resizes while you press it feels broken. */
+.button--loading {
+  cursor: progress;
+}
+
+.button__spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  animation: button-spin 700ms linear infinite;
+}
+
+@keyframes button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button__spinner {
+    /* Keep the spinner visible but stop the rotation, so the user
+     * still sees that something is in progress. */
+    animation: none;
+    border-top-color: currentColor;
+    opacity: 0.5;
+  }
+}

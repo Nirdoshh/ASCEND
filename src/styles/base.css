@@ -1,0 +1,144 @@
+/*
+ * Base layer: reset + element defaults.
+ *
+ * The goal is a predictable starting point, not a zero. We keep the
+ * browser's native semantics (buttons are buttons, lists are lists)
+ * because that is what screen readers expect.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  /* Honour the user's browser font-size setting and never block zoom.
+   * Disabling user scaling is an automatic WCAG 2.2 AA failure. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  background-color: var(--surface-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Never let a long unbreakable word (a URL in a milestone title)
+   * create a horizontal scrollbar on a phone. */
+  overflow-wrap: break-word;
+}
+
+/* Headings ------------------------------------------------------------ */
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+h2 {
+  font-size: var(--text-xl);
+}
+h3 {
+  font-size: var(--text-lg);
+}
+h4 {
+  font-size: var(--text-base);
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* Form controls ------------------------------------------------------- */
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Media --------------------------------------------------------------- */
+
+img,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+svg {
+  flex-shrink: 0;
+}
+
+/* Focus --------------------------------------------------------------- */
+
+/*
+ * We use :focus-visible so a mouse user does not see a ring on every
+ * click, but a keyboard user ALWAYS sees one. Never remove focus
+ * styling without replacing it with something equally visible.
+ */
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
+}
+
+/* Motion -------------------------------------------------------------- */
+
+/*
+ * Respect reduced-motion at the global level so a component author
+ * cannot accidentally ship an animation that ignores the preference.
+ * Every transition and animation collapses to near-zero rather than
+ * being removed, so state changes still register visually.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Selection ----------------------------------------------------------- */
+
+::selection {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
