@@ -36,6 +36,11 @@ class Boundary extends Component<Props, State> {
     // Intentionally console-only for now. Phase 13 introduces a
     // structured, privacy-safe error reporter. We do NOT send the
     // user's goal text or reflections anywhere.
+    //
+    // This is one of the two places in ASCEND that writes to the
+    // console. It is deliberate and local: `no-console` is on
+    // everywhere else so that accidental logging is still visible.
+    // eslint-disable-next-line no-console
     console.error('[ascend] render error', error, info.componentStack)
   }
 

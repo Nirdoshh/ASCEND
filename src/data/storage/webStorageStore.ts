@@ -70,6 +70,11 @@ export function createWebStorageStore(
         // Corrupt data is worse than no data: it can break the app on
         // every load. We drop it and continue with defaults, and we log
         // so the condition is visible in development.
+        //
+        // This is one of the two places in ASCEND that writes to the
+        // console. It is deliberate and local: `no-console` is on
+        // everywhere else so that accidental logging is still visible.
+        // eslint-disable-next-line no-console
         console.warn(`[ascend] discarded corrupt value for key "${key}"`)
         try {
           storage.removeItem(key)

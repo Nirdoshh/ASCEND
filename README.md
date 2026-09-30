@@ -41,6 +41,28 @@ npm run deploy      # build and deploy to Cloudflare
 npm run preview     # serve the production build locally
 ```
 
+### Quality gate
+
+Every change passes all four before it is committed. `npm run verify` runs them in
+order; run the four individually when you want to see each one.
+
+```bash
+npm run typecheck   # tsc across all three projects (app, test, node/worker)
+npm run lint        # ESLint: TypeScript, React, React Hooks, JSX a11y
+npm test            # 75 tests
+npm run build       # production build, sizes checked below
+```
+
+`npm run lint` runs with `--max-warnings 0`: a warning fails the gate. A small number of
+rules are set to `warn` rather than `error` (hook dependency arrays, `console`) so that
+the editor stays quiet while CI stays strict.
+
+ESLint is configured in `eslint.config.js`, which is commented rule-by-rule with the
+reason each rule is on. Read it before adding one: every rule there had to justify its
+own existence. We deliberately do not enforce formatting — Prettier, import sorting and
+line width are not defects, and a linter that reports style is a linter people stop
+reading.
+
 ## Architecture in one paragraph
 
 A React + TypeScript single-page app served by a single Cloudflare Worker that
@@ -105,7 +127,8 @@ docs/
 
 docs/adr/                0001 Cloudflare Worker, 0002 repository interfaces,
                          0003 CSS tokens, 0004 no DB/auth in V1,
-                         0005 single Preferences object
+                         0005 single Preferences object,
+                         0006 toolchain versions (TS 6 / ESLint 9)
 ```
 
 ## Design system
@@ -147,6 +170,10 @@ WCAG 2.2 AA is the target, treated as a requirement rather than a pass at the en
 - **Contrast** — WCAG AA against the real token values
 - **Primitives** — progress clamping, button double-submit prevention, label binding
 - **Navigation** — four destinations, correct `aria-current`, single `<nav>`
+
+Two real defects were caught by the test suite in Phase 1 and fixed: a border token at
+1.49:1 contrast (now 3.15:1) and a `storageStatus` flag initialised from a meaningless
+version check (now `repository.isAvailable()`).
 - **Theme** — cycling and accessible naming
 
 ## Deployment

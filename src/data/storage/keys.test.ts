@@ -1,4 +1,3 @@
-import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { ASCEND_PREFERENCES_KEY } from './keys'
