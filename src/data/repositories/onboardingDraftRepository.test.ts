@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { migratedGrowthAreaId } from '../../domain/growthAreaId'
 import {
   addCustomGrowthArea,
   createOnboardingDraft,
@@ -11,6 +12,8 @@ import { ASCEND_ONBOARDING_DRAFT_KEY } from '../storage/keys'
 import {
   createOnboardingDraftRepository,
   migrateAndNormalizeDraft,
+  migrateDraftV1ToV2,
+  ONBOARDING_DRAFT_MIGRATIONS,
 } from './onboardingDraftRepository'
 
 const NOW = '2026-10-01T09:00:00.000Z'
@@ -18,9 +21,26 @@ const LATER = '2026-10-01T09:05:00.000Z'
 
 function sampleDraft() {
   let draft = createOnboardingDraft(NOW)
-  draft = selectGrowthArea(draft, 'fitness', LATER)
-  draft = addCustomGrowthArea(draft, { id: 'piano', name: 'Piano' }, LATER)
+  draft = selectGrowthArea(draft, 'ga_fitness', LATER)
+  draft = addCustomGrowthArea(
+    draft,
+    { id: 'ga_pianofixed01', name: 'Piano', normalizedName: 'piano' },
+    LATER,
+  )
   return draft
+}
+
+/** A Phase 2A draft, exactly as it was written to storage. */
+function phase2ADraft(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    currentStep: 'growth-areas',
+    selectedGrowthAreas: ['fitness', 'piano'],
+    customGrowthAreas: [{ id: 'piano', name: 'Piano' }],
+    startedAt: NOW,
+    updatedAt: LATER,
+    ...overrides,
+  }
 }
 
 describe('migrateAndNormalizeDraft', () => {
@@ -32,33 +52,31 @@ describe('migrateAndNormalizeDraft', () => {
   })
 
   it('returns null for a value that is not an object', () => {
-    for (const raw of ['draft', 42, true, ['fitness']]) {
+    for (const raw of ['draft', 42, true, ['ga_fitness']]) {
       expect(migrateAndNormalizeDraft(raw, NOW)).toBeNull()
     }
   })
 
-  it('keeps a valid draft intact', () => {
-    const draft = migrateAndNormalizeDraft(sampleDraft(), NOW)
-
-    expect(draft).toEqual(sampleDraft())
+  it('keeps a valid current-version draft intact', () => {
+    expect(migrateAndNormalizeDraft(sampleDraft(), NOW)).toEqual(sampleDraft())
   })
 
   it('discards a draft with no readable version, rather than guessing', () => {
     // A value with no schemaVersion is hand-written or from a build we
     // know nothing about. We cannot migrate it, so we start clean
     // rather than show answers we might have misread.
-    expect(migrateAndNormalizeDraft({ selectedGrowthAreas: ['fitness'] }, NOW)).toBeNull()
+    expect(migrateAndNormalizeDraft({ selectedGrowthAreaIds: ['ga_fitness'] }, NOW)).toBeNull()
   })
 
   it('keeps what it understands from a future version', () => {
-    // v2 data opened by a v1 build must not be thrown away: the user
-    // really did answer those questions in a newer app.
+    // Newer data opened by an older build must not be thrown away: the
+    // user really did answer those questions in a newer app.
     const result = migrateAndNormalizeDraft(
       {
         schemaVersion: 99,
         currentStep: 'growth-areas',
-        selectedGrowthAreas: ['fitness'],
-        customGrowthAreas: [{ id: 'piano', name: 'Piano' }],
+        selectedGrowthAreaIds: ['ga_fitness'],
+        customGrowthAreas: [{ id: 'ga_x', name: 'Piano', normalizedName: 'piano' }],
         goal: 'play a Chopin nocturne',
         startedAt: NOW,
         updatedAt: LATER,
@@ -66,8 +84,8 @@ describe('migrateAndNormalizeDraft', () => {
       NOW,
     )
 
-    expect(result?.selectedGrowthAreas).toEqual(['fitness'])
-    expect(result?.customGrowthAreas).toEqual([{ id: 'piano', name: 'Piano' }])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
+    expect(result?.customGrowthAreas).toEqual([{ id: 'ga_x', name: 'Piano', normalizedName: 'piano' }])
     expect(result?.currentStep).toBe('growth-areas')
     expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
     // A field this build has no concept of is dropped, not smuggled in.
@@ -91,57 +109,57 @@ describe('migrateAndNormalizeDraft', () => {
 
   it('discards a draft when a migration step is missing', () => {
     expect(
-      migrateAndNormalizeDraft({ schemaVersion: 1, selectedGrowthAreas: ['fitness'] }, NOW, 3, {}),
+      migrateAndNormalizeDraft({ schemaVersion: 1, selectedGrowthAreaIds: ['ga_fitness'] }, NOW, 3, {}),
     ).toBeNull()
   })
 
   it('replaces an unrecognised step with welcome, keeping the selections', () => {
     const result = migrateAndNormalizeDraft(
-      { schemaVersion: 1, currentStep: 'levitation', selectedGrowthAreas: ['fitness'] },
+      { schemaVersion: 2, currentStep: 'levitation', selectedGrowthAreaIds: ['ga_fitness'] },
       NOW,
     )
 
     expect(result?.currentStep).toBe('welcome')
-    expect(result?.selectedGrowthAreas).toEqual(['fitness'])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
   })
 
   it('drops selected ids that no longer name an area', () => {
     const result = migrateAndNormalizeDraft(
       {
-        schemaVersion: 1,
-        selectedGrowthAreas: ['fitness', 'retired-in-a-later-build'],
+        schemaVersion: 2,
+        selectedGrowthAreaIds: ['ga_fitness', 'ga_retiredina-later-build'],
       },
       NOW,
     )
 
-    expect(result?.selectedGrowthAreas).toEqual(['fitness'])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
   })
 
   it('drops duplicate selections but keeps the order the user chose in', () => {
     const result = migrateAndNormalizeDraft(
-      { schemaVersion: 1, selectedGrowthAreas: ['reading', 'fitness', 'reading'] },
+      { schemaVersion: 2, selectedGrowthAreaIds: ['ga_reading', 'ga_fitness', 'ga_reading'] },
       NOW,
     )
 
-    expect(result?.selectedGrowthAreas).toEqual(['reading', 'fitness'])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_reading', 'ga_fitness'])
   })
 
   it('rejects non-string and empty selections', () => {
     const result = migrateAndNormalizeDraft(
-      { schemaVersion: 1, selectedGrowthAreas: ['fitness', '', 42, null, ['x']] },
+      { schemaVersion: 2, selectedGrowthAreaIds: ['ga_fitness', '', 42, null, ['x']] },
       NOW,
     )
 
-    expect(result?.selectedGrowthAreas).toEqual(['fitness'])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
   })
 
   it('discards unusable custom areas and keeps the good ones', () => {
     const result = migrateAndNormalizeDraft(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         customGrowthAreas: [
-          { id: 'piano', name: 'Piano' },
-          { id: 'x', name: '   ' },
+          { id: 'ga_keepme00001', name: 'Piano', normalizedName: 'piano' },
+          { id: 'ga_x', name: '   ' },
           { name: '' },
           'not-an-object',
           null,
@@ -151,58 +169,238 @@ describe('migrateAndNormalizeDraft', () => {
       NOW,
     )
 
-    expect(result?.customGrowthAreas).toEqual([{ id: 'piano', name: 'Piano' }])
+    expect(result?.customGrowthAreas).toEqual([
+      { id: 'ga_keepme00001', name: 'Piano', normalizedName: 'piano' },
+    ])
   })
 
-  it('re-derives a custom area id instead of trusting the stored one', () => {
+  it('TRUSTS a stored custom area id, and re-derives only the normalizedName', () => {
+    // The inverse of the Phase 2A rule. An id is identity, so it is read;
+    // a normalizedName is derived, so a tampered copy is overwritten.
     const result = migrateAndNormalizeDraft(
-      { schemaVersion: 1, customGrowthAreas: [{ id: 'tampered', name: ' Digital Marketing ' }] },
+      {
+        schemaVersion: 2,
+        customGrowthAreas: [
+          { id: 'ga_opaque0000001', name: ' Digital Marketing ', normalizedName: 'WRONG' },
+        ],
+      },
       NOW,
     )
 
-    expect(result?.customGrowthAreas).toEqual([{ id: 'digital marketing', name: 'Digital Marketing' }])
+    expect(result?.customGrowthAreas).toEqual([
+      { id: 'ga_opaque0000001', name: 'Digital Marketing', normalizedName: 'digital marketing' },
+    ])
   })
 
   it('drops a custom area stored twice, keeping the user’s own spelling', () => {
     const result = migrateAndNormalizeDraft(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         customGrowthAreas: [
-          { name: 'Piano' },
-          { name: 'PIANO' },
+          { id: 'ga_same00000001', name: 'Piano', normalizedName: 'piano' },
+          { id: 'ga_same00000001', name: 'PIANO', normalizedName: 'piano' },
         ],
-        selectedGrowthAreas: ['piano'],
+        selectedGrowthAreaIds: ['ga_same00000001'],
       },
       NOW,
     )
 
-    expect(result?.customGrowthAreas).toEqual([{ id: 'piano', name: 'Piano' }])
-    // And the selection now resolves, because the area survived.
-    expect(result?.selectedGrowthAreas).toEqual(['piano'])
+    expect(result?.customGrowthAreas).toEqual([
+      { id: 'ga_same00000001', name: 'Piano', normalizedName: 'piano' },
+    ])
+    // And the selection still resolves, because the area survived.
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_same00000001'])
   })
 
   it('keeps a draft whose timestamps are unreadable, because the answers are real', () => {
     const result = migrateAndNormalizeDraft(
-      { schemaVersion: 1, selectedGrowthAreas: ['fitness'], startedAt: 'whenever', updatedAt: 5 },
+      { schemaVersion: 2, selectedGrowthAreaIds: ['ga_fitness'], startedAt: 'whenever', updatedAt: 5 },
       NOW,
     )
 
-    expect(result?.selectedGrowthAreas).toEqual(['fitness'])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
     expect(result?.startedAt).toBe(NOW)
     expect(result?.updatedAt).toBe(NOW)
   })
 
   it('survives a draft with no fields at all beyond the version', () => {
-    const result = migrateAndNormalizeDraft({ schemaVersion: 1 }, NOW)
-
-    expect(result).toEqual({
-      schemaVersion: 1,
+    expect(migrateAndNormalizeDraft({ schemaVersion: 2 }, NOW)).toEqual({
+      schemaVersion: ONBOARDING_SCHEMA_VERSION,
       currentStep: 'welcome',
-      selectedGrowthAreas: [],
+      selectedGrowthAreaIds: [],
       customGrowthAreas: [],
       startedAt: NOW,
       updatedAt: NOW,
     })
+  })
+})
+
+describe('v1 to v2 migration', () => {
+  it('is registered against the version it upgrades from', () => {
+    expect(Object.keys(ONBOARDING_DRAFT_MIGRATIONS)).toEqual(['1'])
+    expect(ONBOARDING_DRAFT_MIGRATIONS[1]).toBe(migrateDraftV1ToV2)
+  })
+
+  it('keeps a real Phase 2A draft working', () => {
+    // The user selected Fitness and a custom "Piano". After migration both
+    // must still be selected, and the custom area must still be listed.
+    const result = migrateAndNormalizeDraft(phase2ADraft(), NOW)
+
+    expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
+    expect(result?.customGrowthAreas).toEqual([
+      { id: migratedGrowthAreaId('piano'), name: 'Piano', normalizedName: 'piano' },
+    ])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness', migratedGrowthAreaId('piano')])
+    expect(result?.currentStep).toBe('growth-areas')
+    expect(result?.startedAt).toBe(NOW)
+    expect(result?.updatedAt).toBe(LATER)
+  })
+
+  it('carries selections that were already normalized names', () => {
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({ selectedGrowthAreas: [' FITNESS ', 'Digital   Marketing'] }),
+      NOW,
+    )
+
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
+  })
+
+  it('gives a migrated custom area a deterministic id', () => {
+    // If this id were random, every page load would re-mint identities
+    // and the user's selection would appear to vanish each time they
+    // came back to the app.
+    const first = migrateAndNormalizeDraft(phase2ADraft(), NOW)
+    const second = migrateAndNormalizeDraft(phase2ADraft(), NOW)
+
+    expect(first?.selectedGrowthAreaIds).toEqual(second?.selectedGrowthAreaIds)
+    expect(first?.customGrowthAreas).toEqual(second?.customGrowthAreas)
+  })
+
+  it('does not reuse the Phase 2A name-as-id value', () => {
+    // Keeping it would preserve the exact bug the migration exists to
+    // fix: an identity that moves when the name is corrected.
+    const result = migrateAndNormalizeDraft(phase2ADraft(), NOW)
+
+    expect(result?.customGrowthAreas[0]?.id).not.toBe('piano')
+  })
+
+  it('migrates a draft with no custom areas at all', () => {
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({ customGrowthAreas: [], selectedGrowthAreas: ['reading', 'money'] }),
+      NOW,
+    )
+
+    expect(result?.customGrowthAreas).toEqual([])
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_reading', 'ga_money'])
+  })
+
+  it('keeps the first spelling when a custom area appears twice', () => {
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({
+        customGrowthAreas: [
+          { id: 'piano', name: 'Piano' },
+          { id: 'piano', name: 'PIANO' },
+        ],
+        selectedGrowthAreas: ['piano'],
+      }),
+      NOW,
+    )
+
+    expect(result?.customGrowthAreas).toEqual([
+      { id: migratedGrowthAreaId('piano'), name: 'Piano', normalizedName: 'piano' },
+    ])
+  })
+
+  it('never lets a migrated custom area shadow a suggestion', () => {
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({
+        customGrowthAreas: [{ id: 'fitness', name: 'fitness' }],
+        selectedGrowthAreas: ['fitness'],
+      }),
+      NOW,
+    )
+
+    // The selection resolves to the suggestion's id. In Phase 2A the two
+    // entries shared one identity, so they were already the same area; the
+    // migration must not turn that into a selection the screen cannot show.
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
+
+    // The custom record is kept rather than deleted — it may be the only
+    // remaining trace of what the user once wanted, and discarding data on
+    // a guess is never the answer.
+    expect(result?.customGrowthAreas).toEqual([
+      { id: migratedGrowthAreaId('fitness'), name: 'fitness', normalizedName: 'fitness' },
+    ])
+  })
+
+  it('drops a v1 selection with no area behind it, rather than inventing one', () => {
+    // In Phase 2A such a name resolved to nothing, so the UI was already
+    // showing it as unselected. Keeping it would mean claiming a choice
+    // the screen cannot display.
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({ selectedGrowthAreas: ['fitness', 'nothingisbehindthename'] }),
+      NOW,
+    )
+
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_fitness'])
+  })
+
+  it('discards unusable v1 custom areas', () => {
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({
+        customGrowthAreas: [{ id: 'piano', name: 'Piano' }, null, 'nope', { id: 'x' }, { name: '  ' }],
+      }),
+      NOW,
+    )
+
+    expect(result?.customGrowthAreas).toEqual([
+      { id: migratedGrowthAreaId('piano'), name: 'Piano', normalizedName: 'piano' },
+    ])
+  })
+
+  it('removes the superseded v1 field instead of leaving it behind', () => {
+    // Two fields holding selections, one of them dead, is exactly the
+    // kind of duplication that produces a bug six months later.
+    const migrated = migrateDraftV1ToV2(phase2ADraft()) as Record<string, unknown>
+
+    expect(migrated).not.toHaveProperty('selectedGrowthAreas')
+    expect(migrated).toHaveProperty('selectedGrowthAreaIds')
+  })
+
+  it('preserves the order the user chose in', () => {
+    const result = migrateAndNormalizeDraft(
+      phase2ADraft({
+        selectedGrowthAreas: ['money', 'fitness', 'reading'],
+        customGrowthAreas: [],
+      }),
+      NOW,
+    )
+
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_money', 'ga_fitness', 'ga_reading'])
+  })
+
+  it('leaves values that are not objects alone', () => {
+    for (const value of [null, 'draft', 42, ['x']]) {
+      expect(migrateDraftV1ToV2(value)).toBe(value)
+    }
+  })
+
+  it('preserves a v1 draft through a full save and load cycle', () => {
+    // The end-to-end version of the same promise, through the real store
+    // rather than through the pure function.
+    window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, JSON.stringify(phase2ADraft()))
+
+    const repository = createOnboardingDraftRepository(createWebStorageStore())
+    const loaded = repository.load()
+
+    expect(loaded?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
+    expect(loaded?.selectedGrowthAreaIds).toEqual(['ga_fitness', migratedGrowthAreaId('piano')])
+
+    // Saving and reloading must not re-mint the ids.
+    expect(loaded).not.toBeNull()
+    if (!loaded) return
+    repository.save(loaded)
+    expect(repository.load()).toEqual(loaded)
   })
 })
 
@@ -226,9 +424,7 @@ describe('onboardingDraftRepository', () => {
     // crashing the screen on every load.
     window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, '{ this is not json')
 
-    const repository = createOnboardingDraftRepository(createWebStorageStore())
-
-    expect(repository.load()).toBeNull()
+    expect(createOnboardingDraftRepository(createWebStorageStore()).load()).toBeNull()
   })
 
   it('does not let onboarding touch the preferences key', () => {

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { createOnboardingDraftRepository } from '../../data/repositories'
 import type { OnboardingDraftRepository } from '../../data/repositories'
 import { createWebStorageStore, type StoreWriteResult } from '../../data/storage'
+import { createGrowthAreaId } from '../../domain/growthAreaId'
 import {
   createCustomGrowthArea,
   SUGGESTED_GROWTH_AREAS,
@@ -130,7 +131,12 @@ export function OnboardingDraftProvider({
       // the suggestions are code, so they are always available, and a
       // duplicate must be caught even on a first visit.
       const existing = draft ? knownGrowthAreas(draft) : SUGGESTED_GROWTH_AREAS
-      const result = createCustomGrowthArea(raw, existing)
+
+      // The id is minted HERE, at the moment of creation, and never
+      // recomputed. It is the reference every later milestone, action,
+      // point event and D1 row will point at, so deriving it from the
+      // name would make a rename silently break all of them.
+      const result = createCustomGrowthArea(raw, existing, createGrowthAreaId())
 
       if (result.ok) {
         apply((current) => addCustomGrowthArea(current, result.area, now()))
@@ -159,7 +165,7 @@ export function OnboardingDraftProvider({
       // before any draft exists. Returning an empty list here is what
       // made a deep link to step 2 an unusable screen.
       areas: usable ? knownGrowthAreas(usable) : SUGGESTED_GROWTH_AREAS,
-      isSelected: (id: string) => usable?.selectedGrowthAreas.includes(id) ?? false,
+      isSelected: (id: string) => usable?.selectedGrowthAreaIds.includes(id) ?? false,
       storageStatus,
       begin,
       toggleArea,

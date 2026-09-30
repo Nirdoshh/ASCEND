@@ -19,12 +19,15 @@
  * below changes.
  */
 
+import { SUGGESTED_GROWTH_AREAS } from '../../domain/growthAreas'
+import { migratedGrowthAreaId } from '../../domain/growthAreaId'
+import { normalizeGrowthAreaName, toGrowthAreaDisplayName } from '../../domain/growthAreaName'
 import {
-  normalizeCustomGrowthArea,
+  normalizeDraftGrowthArea,
   ONBOARDING_SCHEMA_VERSION,
   ONBOARDING_STEPS,
   reconcileSelections,
-  type CustomGrowthArea,
+  type DraftGrowthArea,
   type OnboardingDraft,
   type OnboardingStep,
 } from '../../domain/onboardingDraft'
@@ -43,14 +46,99 @@ export interface OnboardingDraftRepository {
 /**
  * Upgrades an older draft to the current shape.
  *
- * Empty at v1 because there is no v0. The mechanism exists now so that
- * when v2 arrives, real user drafts can be upgraded instead of thrown
- * away — and throwing away a user's typing is the worst thing this app
- * could do.
- *
- *   { 1: (value) => ({ ...value, customGrowthAreas: [] }) }
+ * Keyed by the version being upgraded FROM, and applied in order, so a
+ * v1 draft reaching a v3 build walks 1 -> 2 -> 3. Registering the
+ * mechanism now, while there is exactly one version, is what makes it
+ * possible to change the stored shape later without throwing away what
+ * a user typed — and throwing away a user's typing is the worst thing
+ * this app could do.
  */
-export const ONBOARDING_DRAFT_MIGRATIONS: Record<number, (value: unknown) => unknown> = {}
+export const ONBOARDING_DRAFT_MIGRATIONS: Record<number, (value: unknown) => unknown> = {
+  1: migrateDraftV1ToV2,
+}
+
+/**
+ * v1 -> v2: normalized names stop being identities.
+ *
+ * Phase 2A stored `selectedGrowthAreas` as normalized names and used the
+ * normalized name as a custom area's id. Both are replaced here by real
+ * ids, and every v1 selection is translated through the same lookup, so
+ * a draft keeps exactly the choices it had.
+ *
+ * Deterministic on purpose. A custom area's new id is hashed from the
+ * name it used to BE rather than generated fresh, so migrating the same
+ * draft twice always yields the same ids. If ids were random here, every
+ * page load would re-mint identities and a user's selection would appear
+ * to vanish each time they came back.
+ *
+ * A v1 selection that matches no suggestion and no custom area is
+ * dropped. That is a repair rather than data loss: in v1 such a name
+ * resolved to nothing, so the UI was already showing it as unselected.
+ * The string cannot be honoured because there is no area behind it, and
+ * keeping it would mean claiming a choice the screen cannot display.
+ */
+export function migrateDraftV1ToV2(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
+
+  const v1 = value as Record<string, unknown>
+
+  const customGrowthAreas = toArray(v1.customGrowthAreas)
+    .map(migrateV1CustomArea)
+    .filter((area): area is DraftGrowthArea => area !== null)
+
+  // The order here is load-bearing. Custom areas go in first and the
+  // suggestions overwrite them, so a v1 draft that recorded a custom
+  // "fitness" resolves its selection to `ga_fitness`. In Phase 2A those
+  // two shared one identity and were therefore already the same area;
+  // mapping the selection to the custom's new id instead would produce a
+  // selection that mergeGrowthAreas then hides as a duplicate — the user
+  // would silently lose their choice.
+  const idByNormalizedName = new Map<string, string>()
+  for (const area of customGrowthAreas) {
+    idByNormalizedName.set(area.normalizedName, area.id)
+  }
+  for (const area of SUGGESTED_GROWTH_AREAS) {
+    idByNormalizedName.set(area.normalizedName, area.id)
+  }
+
+  const selectedGrowthAreaIds: string[] = []
+  const seen = new Set<string>()
+
+  for (const entry of toArray(v1.selectedGrowthAreas)) {
+    if (typeof entry !== 'string') continue
+    const id = idByNormalizedName.get(normalizeGrowthAreaName(entry))
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    selectedGrowthAreaIds.push(id)
+  }
+
+  // The v1 key is removed rather than left behind. Two fields holding
+  // selections, one of them dead, is exactly the kind of duplication that
+  // produces a bug six months later.
+  const { selectedGrowthAreas: _superseded, ...rest } = v1
+
+  return { ...rest, customGrowthAreas, selectedGrowthAreaIds }
+}
+
+/**
+ * A v1 custom area becomes a v2 one with a hashed id.
+ *
+ * The v1 `id` is deliberately NOT reused: it was the normalized name, and
+ * keeping it would preserve the exact bug this migration exists to fix.
+ */
+function migrateV1CustomArea(entry: unknown): DraftGrowthArea | null {
+  if (typeof entry !== 'object' || entry === null) return null
+
+  const name = toGrowthAreaDisplayName(String((entry as { name?: unknown }).name ?? ''))
+  if (name === '') return null
+
+  const normalizedName = normalizeGrowthAreaName(name)
+  return { id: migratedGrowthAreaId(normalizedName), name, normalizedName }
+}
+
+function toArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : []
+}
 
 export function createOnboardingDraftRepository(
   store: KeyValueStore,
@@ -142,7 +230,7 @@ function normalizeFields(value: object, now: string): OnboardingDraft {
   const draft: OnboardingDraft = {
     schemaVersion: ONBOARDING_SCHEMA_VERSION,
     currentStep,
-    selectedGrowthAreas: normalizeSelections(candidate.selectedGrowthAreas),
+    selectedGrowthAreaIds: normalizeSelections(candidate.selectedGrowthAreaIds),
     customGrowthAreas,
     startedAt: normalizeTimestamp(candidate.startedAt, now),
     updatedAt: normalizeTimestamp(candidate.updatedAt, now),
@@ -177,14 +265,14 @@ function normalizeSelections(value: unknown): string[] {
   return kept
 }
 
-function normalizeCustomAreas(value: unknown): CustomGrowthArea[] {
+function normalizeCustomAreas(value: unknown): DraftGrowthArea[] {
   if (!Array.isArray(value)) return []
 
   const seen = new Set<string>()
-  const kept: CustomGrowthArea[] = []
+  const kept: DraftGrowthArea[] = []
 
   for (const entry of value) {
-    const area = normalizeCustomGrowthArea(entry)
+    const area = normalizeDraftGrowthArea(entry)
     // First one wins, which preserves the capitalization the user
     // originally typed if the same area was somehow stored twice.
     if (!area || seen.has(area.id)) continue

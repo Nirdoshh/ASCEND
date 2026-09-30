@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { ScreenHeader } from '../../app/ScreenHeader'
 import { Button, TextField } from '../../components/ui'
 import { MAX_GROWTH_AREA_NAME_LENGTH } from '../../domain/growthAreas'
+import { isGrowthAreaStepValid } from '../../domain/onboardingValidation'
 import { GrowthAreaChip } from './GrowthAreaChip'
 import { useOnboarding } from './OnboardingDraftProvider'
 import './GrowthAreasScreen.css'
@@ -38,7 +39,7 @@ import './GrowthAreasScreen.css'
  */
 export function GrowthAreasScreen() {
   const navigate = useNavigate()
-  const { areas, isSelected, toggleArea, createCustomArea, advanceFrom } = useOnboarding()
+  const { draft, areas, isSelected, toggleArea, createCustomArea, advanceFrom } = useOnboarding()
 
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -48,8 +49,18 @@ export function GrowthAreasScreen() {
 
   const suggested = areas.filter((area) => area.kind === 'suggested')
   const custom = areas.filter((area) => area.kind === 'custom')
+
+  // Whether Continue is enabled is a DOMAIN question, asked through the
+  // step's own validator. The screen used to decide it by counting chips,
+  // which meant the rule lived in two places and the two would eventually
+  // disagree. A component may ask about its own step; it must never decide
+  // whether onboarding is complete overall.
+  const step = isGrowthAreaStepValid(draft)
+  const canContinue = step.valid
+
+  // The count is for display only. It reports what the user picked and is
+  // never used to decide anything.
   const chosenCount = areas.filter((area) => isSelected(area.id)).length
-  const canContinue = chosenCount > 0
 
   const closeComposer = () => {
     setCreating(false)
@@ -204,9 +215,10 @@ export function GrowthAreasScreen() {
                   : `${chosenCount} chosen. Pick more, or continue.`}
               </p>
             ) : (
-              // Explains the disabled button instead of leaving the
-              // user to work out why it will not press.
-              <p className="areas__count text-sm text-muted">Pick at least one to continue.</p>
+              // The message comes from the validator, so the reason the
+              // button is disabled is stated in exactly one place and can
+              // never drift from the rule.
+              <p className="areas__count text-sm text-muted">{step.message}</p>
             )}
 
             <Button variant="quiet" onClick={() => void navigate('/onboarding')}>

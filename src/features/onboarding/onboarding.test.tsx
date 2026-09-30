@@ -77,6 +77,34 @@ function readStoredDraft(): Record<string, unknown> | null {
   return raw ? (JSON.parse(raw) as Record<string, unknown>) : null
 }
 
+function storedCustomAreas(): { id: string; name: string; normalizedName: string }[] {
+  return (readStoredDraft()?.customGrowthAreas ?? []) as {
+    id: string
+    name: string
+    normalizedName: string
+  }[]
+}
+
+function storedSelection(): string[] {
+  return (readStoredDraft()?.selectedGrowthAreaIds ?? []) as string[]
+}
+
+/**
+ * Forces the in-memory draft back out to storage without changing it.
+ *
+ * Load-time repair — reconciling a dangling id, rebuilding a missing one,
+ * overwriting a stale normalizedName — happens in memory and is only
+ * persisted when something changes. That is deliberate: reconciling on
+ * every load would mean writing during the first render, and storage is
+ * blocked for some users. So a test asserting the *stored* result of a
+ * repair has to touch something first. Clicking an unselected chip twice
+ * triggers the write and leaves the selection exactly as it was.
+ */
+async function flushDraftToStorage(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(chip('Coding'))
+  await user.click(chip('Coding'))
+}
+
 function chip(name: string): HTMLElement {
   return screen.getByRole('button', { name })
 }
@@ -170,7 +198,7 @@ describe('the welcome screen', () => {
 
     // Nothing has been answered yet, but the draft exists so that a
     // refresh on step 2 still knows who is asking.
-    expect(readStoredDraft()).toMatchObject({ selectedGrowthAreas: [], customGrowthAreas: [] })
+    expect(readStoredDraft()).toMatchObject({ selectedGrowthAreaIds: [], customGrowthAreas: [] })
   })
 })
 
@@ -231,7 +259,9 @@ describe('choosing growth areas', () => {
     await user.click(chip('Fitness'))
     await user.click(chip('Coding'))
 
-    expect(readStoredDraft()?.selectedGrowthAreas).toEqual(['reading', 'fitness', 'coding'])
+    // Stored as ids, not names. A name here would break the moment the
+    // user corrected a spelling.
+    expect(storedSelection()).toEqual(['ga_reading', 'ga_fitness', 'ga_coding'])
   })
 
   it('is fully operable with the keyboard', async () => {
@@ -368,8 +398,13 @@ describe('creating your own growth area', () => {
     await user.click(screen.getByRole('button', { name: /add it/i }))
 
     expect(chip('DIGITAL marketing')).toBeInTheDocument()
-    expect(readStoredDraft()?.customGrowthAreas).toEqual([
-      { id: 'digital marketing', name: 'DIGITAL marketing' },
+
+    // The comparison key is normalised; the id is NOT derived from the
+    // name at all. This is the correction in one assertion: two people
+    // typing the same thing get two different areas, and renaming this
+    // one could never break a reference to it.
+    expect(storedCustomAreas()).toEqual([
+      { id: expect.stringMatching(/^ga_[0-9a-z]{16}$/), name: 'DIGITAL marketing', normalizedName: 'digital marketing' },
     ])
   })
 
@@ -385,7 +420,7 @@ describe('creating your own growth area', () => {
     await user.click(screen.getByRole('button', { name: /add it/i }))
 
     expect(await screen.findByText(/you already added “Digital Marketing”/i)).toBeInTheDocument()
-    expect(readStoredDraft()?.customGrowthAreas).toHaveLength(1)
+    expect(storedCustomAreas()).toHaveLength(1)
   })
 
   it('refuses a duplicate of a suggested area', async () => {
@@ -437,15 +472,18 @@ describe('an earlier choice changing never destroys work', () => {
     await user.click(screen.getByRole('button', { name: /add it/i }))
 
     await user.click(chip('Piano'))
-    expect(readStoredDraft()?.selectedGrowthAreas).toEqual([])
+    expect(storedSelection()).toEqual([])
 
     // The definition survives, so re-selecting is instant and the name is
     // unchanged. This is the future-proofing: a Goal written against this
-    // area in Phase 2B lives outside the selection list too.
+    // area in Phase 2B lives outside the selection list too, keyed by this
+    // same id.
     expect(chip('Piano')).toBeInTheDocument()
     await user.click(chip('Piano'))
-    expect(readStoredDraft()?.selectedGrowthAreas).toEqual(['piano'])
-    expect(readStoredDraft()?.customGrowthAreas).toEqual([{ id: 'piano', name: 'Piano' }])
+
+    const id = storedCustomAreas()[0]?.id
+    expect(storedSelection()).toEqual([id])
+    expect(storedCustomAreas()).toEqual([{ id, name: 'Piano', normalizedName: 'piano' }])
   })
 
   it('deselecting one area leaves the others selected', async () => {
@@ -456,7 +494,7 @@ describe('an earlier choice changing never destroys work', () => {
     await user.click(chip('Reading'))
     await user.click(chip('Fitness'))
 
-    expect(readStoredDraft()?.selectedGrowthAreas).toEqual(['reading'])
+    expect(storedSelection()).toEqual(['ga_reading'])
   })
 
   it('never records a goal, duration or effort answer in 2A', async () => {
@@ -539,10 +577,10 @@ describe('surviving refresh, Back and Forward', () => {
     // of a client route. It must render the step, not a blank screen.
     renderWithStoredDraft(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         currentStep: 'growth-areas',
-        selectedGrowthAreas: ['fitness', 'piano'],
-        customGrowthAreas: [{ id: 'piano', name: 'Piano' }],
+        selectedGrowthAreaIds: ['ga_fitness', 'ga_piano1'],
+        customGrowthAreas: [{ id: 'ga_piano1', name: 'Piano', normalizedName: 'piano' }],
         startedAt: '2026-10-01T09:00:00.000Z',
         updatedAt: '2026-10-01T09:00:00.000Z',
       },
@@ -552,6 +590,102 @@ describe('surviving refresh, Back and Forward', () => {
     expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
     expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
     expect(chip('Piano')).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('a real Phase 2A draft after the identity correction', () => {
+  // These fixtures are the exact bytes a shipped Phase 2A build wrote:
+  // `selectedGrowthAreas` holding normalized NAMES, and a custom area
+  // whose `id` WAS its normalized name. They are deliberately not updated
+  // to the new shape, because keeping them is the only way to prove that
+  // a real user's draft still opens.
+  const PHASE_2A_DRAFT = {
+    schemaVersion: 1,
+    currentStep: 'growth-areas',
+    selectedGrowthAreas: ['fitness', 'piano'],
+    customGrowthAreas: [{ id: 'piano', name: 'Piano' }],
+    startedAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:05:00.000Z',
+  }
+
+  it('keeps every choice the user had already made', async () => {
+    renderWithStoredDraft(PHASE_2A_DRAFT, '/onboarding/areas')
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
+    expect(chip('Piano')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps the custom area’s own capitalization', async () => {
+    renderWithStoredDraft(
+      { ...PHASE_2A_DRAFT, customGrowthAreas: [{ id: 'digital marketing', name: 'Digital Marketing' }] },
+      '/onboarding/areas',
+    )
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    expect(chip('Digital Marketing')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('resolves selections written as normalized names to the new ids', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(PHASE_2A_DRAFT, '/onboarding/areas')
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+    await flushDraftToStorage(user)
+
+    expect(storedSelection()).toEqual([
+      'ga_fitness',
+      // Hashed from the name, so the same draft always migrates to the
+      // same identity. A random id here would make the user's selection
+      // vanish on the next page load.
+      expect.stringMatching(/^ga_[0-9a-z]{14}$/),
+    ])
+    expect(storedCustomAreas()[0]).toEqual({
+      id: expect.stringMatching(/^ga_[0-9a-z]{14}$/),
+      name: 'Piano',
+      normalizedName: 'piano',
+    })
+  })
+
+  it('is rewritten at the current schema version, with the old field removed', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(PHASE_2A_DRAFT, '/onboarding/areas')
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+    await flushDraftToStorage(user)
+
+    expect(readStoredDraft()).toMatchObject({ schemaVersion: 2 })
+    expect(readStoredDraft()).not.toHaveProperty('selectedGrowthAreas')
+  })
+
+  it('lets the migrated draft be edited like any other', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(PHASE_2A_DRAFT, '/onboarding/areas')
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    await user.click(chip('Piano'))
+    expect(chip('Piano')).toHaveAttribute('aria-pressed', 'false')
+    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
+    // The custom area definition is still there to come back to.
+    expect(chip('Piano')).toBeInTheDocument()
+
+    await user.click(chip('Piano'))
+    expect(chip('Piano')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('produces the same ids every time, so nothing drifts between loads', async () => {
+    const first = renderWithStoredDraft(PHASE_2A_DRAFT, '/onboarding/areas')
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+    const firstIds = storedSelection()
+    first.unmount()
+
+    renderWithStoredDraft(PHASE_2A_DRAFT, '/onboarding/areas')
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    expect(storedSelection()).toEqual(firstIds)
   })
 })
 
@@ -609,7 +743,7 @@ describe('recovering from bad stored data', () => {
   })
 
   it('starts clean on a draft from a version it cannot migrate', async () => {
-    renderWithStoredDraft({ schemaVersion: 0, selectedGrowthAreas: ['fitness'] })
+    renderWithStoredDraft({ schemaVersion: 0, selectedGrowthAreaIds: ['ga_fitness'] })
 
     expect(await screen.findByRole('button', { name: /start my journey/i })).toBeInTheDocument()
   })
@@ -621,8 +755,8 @@ describe('recovering from bad stored data', () => {
       {
         schemaVersion: 99,
         currentStep: 'growth-areas',
-        selectedGrowthAreas: ['fitness'],
-        customGrowthAreas: [{ id: 'piano', name: 'Piano' }],
+        selectedGrowthAreaIds: ['ga_fitness'],
+        customGrowthAreas: [{ id: 'ga_x', name: 'Piano', normalizedName: 'piano' }],
         goal: 'a goal from a build we do not have',
       },
       '/onboarding/areas',
@@ -634,11 +768,12 @@ describe('recovering from bad stored data', () => {
   })
 
   it('drops a selection that names an area which no longer exists', async () => {
+    const user = userEvent.setup()
     renderWithStoredDraft(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         currentStep: 'growth-areas',
-        selectedGrowthAreas: ['fitness', 'retired-in-a-later-build'],
+        selectedGrowthAreaIds: ['ga_fitness', 'ga_retiredina-later-build'],
         customGrowthAreas: [],
       },
       '/onboarding/areas',
@@ -652,7 +787,26 @@ describe('recovering from bad stored data', () => {
     expect(
       screen.queryByRole('button', { name: 'Retired in a later build' }),
     ).not.toBeInTheDocument()
-    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
+
+    await flushDraftToStorage(user)
+    expect(storedSelection()).toEqual(['ga_fitness'])
+  })
+
+  it('drops a selection that holds a bare name, which is not an id', async () => {
+    // Hand-edited storage, or a half-finished migration. "fitness" was an
+    // id in Phase 2A, so this is a realistic thing to find.
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      { schemaVersion: 2, currentStep: 'growth-areas', selectedGrowthAreaIds: ['fitness'] },
+      '/onboarding/areas',
+    )
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'false')
+
+    await flushDraftToStorage(user)
+    expect(storedSelection()).toEqual([])
   })
 
   it('is usable even on a cold deep link with no draft at all', async () => {
@@ -683,11 +837,73 @@ describe('recovering from bad stored data', () => {
   })
 
   it('survives a stored draft that is not an object at all', async () => {
-    window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, JSON.stringify(['fitness']))
+    window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, JSON.stringify(['ga_fitness']))
 
     renderOnboarding()
 
     expect(await screen.findByRole('button', { name: /start my journey/i })).toBeInTheDocument()
+  })
+
+  it('survives a custom area stored with no id at all', async () => {
+    // Repaired deterministically, so the same draft yields the same area
+    // on every load instead of a new identity each time.
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      { schemaVersion: 2, currentStep: 'growth-areas', customGrowthAreas: [{ name: 'Piano' }] },
+      '/onboarding/areas',
+    )
+
+    expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
+    expect(chip('Piano')).toBeInTheDocument()
+
+    await flushDraftToStorage(user)
+    expect(storedCustomAreas()[0]?.id).toMatch(/^ga_[0-9a-z]{14}$/)
+  })
+
+  it('repairs a tampered normalizedName from the name it belongs to', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      {
+        schemaVersion: 2,
+        currentStep: 'growth-areas',
+        customGrowthAreas: [
+          { id: 'ga_fixed', name: 'Piano', normalizedName: 'something else entirely' },
+        ],
+      },
+      '/onboarding/areas',
+    )
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    // The id is read (identity is never re-derived) but the derived
+    // comparison key is recomputed, so duplicate detection still works.
+    await flushDraftToStorage(user)
+    expect(storedCustomAreas()[0]).toEqual({
+      id: 'ga_fixed',
+      name: 'Piano',
+      normalizedName: 'piano',
+    })
+  })
+
+  it('keeps an area whose id is in a format it does not recognise', async () => {
+    // Rejecting an unfamiliar id would silently delete somebody's growth
+    // area. Carrying it in an odd shape costs nothing.
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      {
+        schemaVersion: 2,
+        currentStep: 'growth-areas',
+        customGrowthAreas: [{ id: 'legacy_piano', name: 'Piano' }],
+      },
+      '/onboarding/areas',
+    )
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    expect(chip('Piano')).toBeInTheDocument()
+
+    await flushDraftToStorage(user)
+    expect(storedCustomAreas()[0]?.id).toBe('legacy_piano')
   })
 })
 
@@ -698,7 +914,25 @@ describe('continuing', () => {
     await screen.findByRole('heading', { level: 1, name: QUESTION })
 
     expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled()
-    expect(screen.getByText(/pick at least one to continue/i)).toBeInTheDocument()
+    // The wording comes from the domain validator, so the reason the
+    // button is disabled is stated in exactly one place.
+    expect(screen.getByText(/choose at least one growth area/i)).toBeInTheDocument()
+  })
+
+  it('explains a disabled Continue that has nothing to do with the count', async () => {
+    // A selection the screen cannot display is a different problem from
+    // an empty one, and gets a different message. This branch is only
+    // reachable from stored data, which is why it lives here.
+    renderWithStoredDraft(
+      { schemaVersion: 99, currentStep: 'goal', selectedGrowthAreaIds: ['ga_goneina-later-build'] },
+      '/onboarding/areas',
+    )
+
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    // A dangling id is reconciled away on load, so the screen honestly
+    // asks for a choice rather than reporting a selection it cannot show.
+    expect(screen.getByText(/choose at least one growth area/i)).toBeInTheDocument()
   })
 
   it('is enabled once something is chosen, and counts the choices', async () => {
