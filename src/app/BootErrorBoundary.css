@@ -1,0 +1,62 @@
+/*
+ * Boot failure fallback.
+ *
+ * Layout only. It uses design tokens rather than literal colours, so the
+ * fallback follows the light and dark themes automatically and cannot
+ * drift out of contrast compliance the way a hard-coded value would.
+ *
+ * No animation and no transition: this screen appears when the app is
+ * already broken, and a motion effect is the last thing that should be
+ * running. That also means `prefers-reduced-motion` needs no handling
+ * here, because there is nothing to reduce.
+ */
+
+.boot-error {
+  /* Fill the viewport so the user is not left staring at a bare corner
+   * of the page with no indication that anything happened. */
+  min-block-size: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background-color: var(--surface-page);
+  color: var(--text-primary);
+}
+
+.boot-error__panel {
+  /* A comfortable reading measure, not the full screen width. */
+  max-inline-size: var(--content-max);
+  inline-size: 100%;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-8);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+.boot-error__title {
+  font-size: var(--text-xl);
+  line-height: 1.25;
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.boot-error__body {
+  color: var(--text-secondary);
+}
+
+/* The recovery action is the one thing this screen is for, so it is
+ * given prominence rather than being left as an unremarkable button. */
+.boot-error__panel .button {
+  margin-block-start: var(--space-2);
+}
+
+.boot-error__hint {
+  color: var(--text-muted);
+  /* Sits below the action, so give it a little air to separate the
+   * instruction from the button the user should try first. */
+  margin-block-start: var(--space-2);
+}
