@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ascend",
+  "main": "worker/index.ts",
+
+  /**
+   * Must be a date the installed workerd runtime actually supports.
+   * A date in the future fails the local dev server with
+   * ERR_FUTURE_COMPATIBILITY_DATE. Raise it deliberately, in steps, as
+   * Cloudflare documents new runtime behaviour.
+   */
+  "compatibility_date": "2026-09-30",
+
+  /**
+   * Phase 1 note:
+   * ASCEND V1 has no database, no auth and no API routes. These are
+   * declared now only so the shape is already correct when D1 arrives
+   * (Phase 11). We do NOT provision a D1 database yet, because Phase 11
+   * should be driven by a real need to persist across devices, not by
+   * an empty table.
+   */
+  "d1_databases": [],
+
+  /**
+   * The Worker serves the compiled SPA and passes everything else
+   * through to the future /api/* routes.
+   */
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  /**
+   * Minimal observability while staying inside the free plan.
+   * Worker logs are useful for Phase 10+ debugging; we do not ship
+   * product analytics through Cloudflare, by design.
+   */
+  "observability": {
+    "enabled": true
+  }
+}

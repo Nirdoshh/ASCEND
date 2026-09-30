@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "useDefineForClassFields": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    /* Strictness: every strict-family flag is on. */
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": false,
+
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": ["src"],
+
+  /**
+   * Tests are type-checked by tsconfig.test.json instead.
+   *
+   * Some tests read files from disk, which needs Node's types. Adding
+   * "node" to THIS project would let application code reference
+   * `process.env` and still type-check, then fail at runtime in the
+   * browser. Keeping Node types out of the app project makes that
+   * mistake impossible rather than merely discouraged.
+   */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
+}

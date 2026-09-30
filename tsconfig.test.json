@@ -1,0 +1,21 @@
+{
+  /**
+   * Type-checking for tests.
+   *
+   * Separate from tsconfig.app.json because a test needs Node's types
+   * (to read tokens.css and assert on files), while application code
+   * must NOT have them. Sharing one project would let app code use
+   * `process.env` and pass type-checking, then fail in the browser.
+   *
+   * Checked by `npm run typecheck`, which runs this project directly
+   * rather than through `tsc -b`, because it is a standalone check and
+   * not part of the incremental app/node build graph.
+   */
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": ["src"],
+  "exclude": []
+}
