@@ -1,0 +1,53 @@
+/*
+ * Welcome screen.
+ *
+ * Vertically centred-ish rather than truly centred: a person who is
+ * 40% down a blank screen reads the next line, whereas content pinned to
+ * the exact middle of a tall screen can land in the gap between two
+ * glances. The generous space above is doing the work.
+ */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  padding-block-start: var(--space-10);
+}
+
+.welcome__wordmark {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  /* Letter-spaced so it reads as a wordmark rather than a heading.
+   * Colour is decorative here: the real heading is the h1 below, so
+   * this being muted costs nothing semantically. */
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+}
+
+.welcome__title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  /* Balances the line breaks so a two-line headline does not leave a
+   * stranded word on the right at some viewport widths. */
+  text-wrap: balance;
+}
+
+.welcome__lead {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.welcome__detail {
+  margin: var(--space-4) 0 0;
+  max-inline-size: 34rem;
+}
+
+.welcome__footnote {
+  margin: 0;
+  text-align: center;
+}

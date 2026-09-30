@@ -38,6 +38,16 @@ describe('routes', () => {
     { path: '/you', heading: 'You' },
     { path: '/design-system', heading: 'Design system' },
     { path: '/nowhere-at-all', heading: /not found/i },
+
+    /*
+     * Onboarding is registered as a sibling of the main shell, not a
+     * child of it, so these two prove that wiring specifically. They
+     * also cover the case that broke in production in Phase 1: a cold
+     * load of a nested client route with no draft stored at all, which
+     * must render a usable screen rather than a blank page.
+     */
+    { path: '/onboarding', heading: 'Become the person you want to be.' },
+    { path: '/onboarding/areas', heading: 'What do you want to improve?' },
   ] as const
 
   for (const { path, heading } of cases) {

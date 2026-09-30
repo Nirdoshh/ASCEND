@@ -2,6 +2,9 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import { AppShell } from './AppShell'
 import { DesignSystemScreen } from '../features/designsystem/DesignSystemScreen'
+import { GrowthAreasScreen } from '../features/onboarding/GrowthAreasScreen'
+import { OnboardingLayout } from '../features/onboarding/OnboardingLayout'
+import { WelcomeScreen } from '../features/onboarding/WelcomeScreen'
 import { JourneyScreen } from '../features/journey/JourneyScreen'
 import { ProgressScreen } from '../features/progress/ProgressScreen'
 import { TodayScreen } from '../features/today/TodayScreen'
@@ -48,6 +51,29 @@ export const router = createBrowserRouter([
       { path: 'today', element: <Navigate to="/" replace /> },
 
       { path: '*', element: <NotFoundScreen /> },
+    ],
+  },
+
+  /*
+   * Onboarding is a SIBLING of the main shell, not a child of it.
+   *
+   * Both reasons in one line: someone who has not picked a Growth Area
+   * has no Journey yet, so the four-screen navigation would be four
+   * empty screens promising things that do not exist. And the draft
+   * provider has to sit above both onboarding steps so navigating
+   * between them keeps one draft in memory rather than reloading from
+   * storage on every step.
+   *
+   * Each onboarding step is its own URL. That is what makes the browser
+   * back button, forward button and refresh work with no extra code:
+   * the URL is the step.
+   */
+  {
+    path: '/onboarding',
+    element: <OnboardingLayout />,
+    children: [
+      { index: true, element: <WelcomeScreen /> },
+      { path: 'areas', element: <GrowthAreasScreen /> },
     ],
   },
 ])

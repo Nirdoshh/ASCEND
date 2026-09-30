@@ -1,0 +1,66 @@
+/*
+ * Growth Areas screen.
+ *
+ * Mobile-first: the chip list is a wrapping flex row so it needs no
+ * grid, no columns and no measurement. Ten chips become a tidy block on
+ * a desktop and a natural two-per-row pile on a 375px phone without a
+ * single media query, which is also why there is no breakpoint logic
+ * to get wrong at 200% zoom.
+ */
+
+.areas {
+  margin-block-start: var(--space-8);
+}
+
+.areas__heading {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  /* Matches the eyebrow treatment used elsewhere so the two section
+   * headings do not compete with the question for attention. */
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.areas__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.areas__composer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background-color: var(--surface-sunken);
+}
+
+.areas__composer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.areas__added {
+  margin: 0;
+  color: var(--color-success);
+  font-size: var(--text-sm);
+}
+
+.areas__saved {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+.areas__count {
+  margin: 0;
+  text-align: center;
+}

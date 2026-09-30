@@ -5,4 +5,4 @@ export {
   type StoreWriteResult,
 } from './webStorageStore'
 
-export { ASCEND_PREFERENCES_KEY } from './keys'
+export { ASCEND_ONBOARDING_DRAFT_KEY, ASCEND_PREFERENCES_KEY } from './keys'

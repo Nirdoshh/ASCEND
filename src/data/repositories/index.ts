@@ -8,3 +8,10 @@ export {
   type PreferencesRepository,
   type ThemePreference,
 } from './preferencesRepository'
+
+export {
+  createOnboardingDraftRepository,
+  migrateAndNormalizeDraft,
+  ONBOARDING_DRAFT_MIGRATIONS,
+  type OnboardingDraftRepository,
+} from './onboardingDraftRepository'

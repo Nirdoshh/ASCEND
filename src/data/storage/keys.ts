@@ -14,3 +14,14 @@
  * two stay in sync, because a mismatch would silently break dark mode.
  */
 export const ASCEND_PREFERENCES_KEY = 'ascend:preferences:v1'
+
+/**
+ * The onboarding draft.
+ *
+ * Separate key, separate version. Onboarding data is transient and
+ * preferences are permanent, so they must be able to be deleted
+ * independently: finishing onboarding clears this key without touching
+ * the user's theme, and a corrupted draft can be discarded without
+ * losing a setting.
+ */
+export const ASCEND_ONBOARDING_DRAFT_KEY = 'ascend:onboarding-draft:v1'

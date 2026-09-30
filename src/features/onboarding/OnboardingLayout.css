@@ -1,0 +1,48 @@
+/*
+ * Onboarding shell.
+ *
+ * A single centred column, full height, with a comfortable reading
+ * measure. Two reasons it is not the main AppShell:
+ *
+ *   - Onboarding screens have one question each and no navigation, so
+ *     they need less chrome, not more.
+ *   - The bottom navigation belongs to someone who already has a
+ *     Journey. Onboarding is how you get one.
+ */
+
+.onboarding {
+  min-block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-page);
+}
+
+.onboarding__main {
+  flex: 1;
+  inline-size: 100%;
+  /* Matches --content-max so the questions are the same measure
+   * everywhere in the app. */
+  max-inline-size: var(--content-max);
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-4) var(--space-12);
+}
+
+.onboarding__main:focus-visible {
+  /* The <main> is a programmatic focus target for the skip link. It
+   * should not draw a focus ring around the entire page, which would be
+   * alarming rather than helpful. */
+  outline: none;
+}
+
+/*
+ * The action area sits below the fold on a long screen and stays put.
+ * Onboarding is short — a few taps — so a sticky footer means the
+ * Continue button is always within thumb reach without scrolling past a
+ * list of chips every time.
+ */
+.onboarding__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-block-start: var(--space-8);
+}
