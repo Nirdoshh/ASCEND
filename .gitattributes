@@ -1,0 +1,30 @@
+# Normalize line endings so Windows and Linux contributors do not
+# produce whole-file diffs for every changed line.
+
+* text=auto eol=lf
+
+*.ts    text
+*.tsx   text
+*.css   text
+*.js    text
+*.json  text
+*.jsonc text
+*.md    text
+*.html  text
+
+*.svg   text
+*.txt   text
+
+# Binary assets must never be touched.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+
+# Keep these out of the language statistics and out of diffs that
+# nobody can read.
+package-lock.json linguist-generated=true -diff
