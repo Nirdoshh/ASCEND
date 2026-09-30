@@ -1,0 +1,76 @@
+/* Design system reference screen --------------------------------------- */
+
+.ds-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.ds-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ds-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 4.5rem;
+  color: var(--text-secondary);
+}
+
+.ds-icon__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.ds-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.ds-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ds-swatch__chip {
+  block-size: 2.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Text tokens are previewed as text on a raised surface, so legibility
+ * is judged at a glance rather than inferred from a flat chip. */
+.ds-swatch__chip--text {
+  display: grid;
+  place-items: center;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.ds-swatch__chip--text::after {
+  content: 'Aa';
+}
+
+.ds-swatch__name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ds-link {
+  color: var(--color-accent-text);
+  font-size: var(--text-sm);
+  align-self: flex-start;
+  min-block-size: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+}

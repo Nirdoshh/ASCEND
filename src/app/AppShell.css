@@ -1,0 +1,56 @@
+/* App shell ------------------------------------------------------------ */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+  /* Use dynamic viewport units so mobile browser chrome (the collapsing
+   * address bar) does not cut off the bottom of the page. 100vh on a
+   * phone is taller than the visible area, which produces a scrollbar
+   * that never goes away. */
+}
+
+.app-shell__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.app-shell__main {
+  flex: 1 1 auto;
+  inline-size: 100%;
+  max-inline-size: var(--content-wide);
+  margin-inline: auto;
+  padding: var(--space-6) var(--content-pad-x) var(--space-12);
+}
+
+.app-shell__main:focus {
+  /* The main region receives focus from the skip link. It must not
+   * draw a focus ring around the whole page, but it must not be
+   * invisible either: a subtle ring confirms where focus landed. */
+  outline: none;
+}
+
+/* Route error ---------------------------------------------------------- */
+
+.route-error {
+  max-inline-size: 34rem;
+  margin-inline: auto;
+  margin-block-start: var(--space-8);
+}
+
+/* Bottom padding on mobile so the sticky nav never covers content. */
+.app-shell__nav-spacer {
+  block-size: var(--nav-height);
+}
+
+@media (min-width: 48rem) {
+  .app-shell__nav-spacer {
+    display: none;
+  }
+
+  .app-shell__main {
+    padding-block-start: var(--space-8);
+  }
+}

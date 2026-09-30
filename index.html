@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASCEND</title>
+    <meta
+      name="description"
+      content="ASCEND turns the person you want to become into small actions you can complete every day."
+    />
+    <meta name="theme-color" content="#fafaf9" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!--
+      Resolve the colour theme before first paint to avoid a flash of the
+      wrong theme. This is the only place outside the repository layer
+      that reads storage, and it only reads. See src/data/storage/keys.ts.
+    -->
+    <script src="/theme-init.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      ASCEND needs JavaScript to show your plan for today. Your data is
+      never sent anywhere.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

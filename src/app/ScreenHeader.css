@@ -1,0 +1,25 @@
+/* Screen header -------------------------------------------------------- */
+
+.screen-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* Room for the sticky header/nav on desktop, and breathing space on
+   * mobile between the nav and the first thing the user reads. */
+  margin-block-end: var(--space-6);
+}
+
+.screen-header__title {
+  font-size: var(--text-2xl);
+  /* The most important typography decision in the shell: the screen
+   * title is the largest text on the page, so the eye lands on the
+   * question before anything else. */
+  line-height: var(--leading-tight);
+}
+
+.screen-header__body {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  max-inline-size: 46ch;
+}
