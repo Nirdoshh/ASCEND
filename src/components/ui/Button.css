@@ -91,7 +91,7 @@
 /* Danger: destructive, never the default choice, never on Today. */
 .button--danger {
   background-color: var(--color-danger);
-  color: #ffffff;
+  color: var(--text-inverse);
 }
 
 .button--danger:hover:not(:disabled) {

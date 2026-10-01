@@ -1,40 +1,42 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { ScreenHeader } from '../../app/ScreenHeader'
-import { Card, EmptyState, TextField, Button } from '../../components/ui'
-import { defaultJourneyRepository, defaultDailyPlanRepository, defaultTodayWinRepository, defaultDailyStepsRepository } from '../../data/repositories/defaults'
+import { addDailyStep, editDailyStep, loadDailySteps, removeDailyStep } from '../../application/dailySteps'
 import { getOrCreateTodayPlan } from '../../application/todayPlan'
-import { setTodayWin, loadTodayWin } from '../../application/todayWin'
-import { addDailyStep, editDailyStep, removeDailyStep, loadDailySteps } from '../../application/dailySteps'
-import type { Journey } from '../../domain/journey'
+import { loadTodayWin, setTodayWin } from '../../application/todayWin'
+import { Button, Card, EmptyState, ErrorState, Icon, Skeleton, TextField } from '../../components/ui'
+import {
+  defaultDailyPlanRepository,
+  defaultDailyStepsRepository,
+  defaultJourneyRepository,
+  defaultTodayWinRepository,
+} from '../../data/repositories/defaults'
 import type { DailyPlan } from '../../domain/dailyPlan'
-import type { TodayWin } from '../../domain/todayWin'
 import type { DailyStep } from '../../domain/dailyStep'
+import type { Journey } from '../../domain/journey'
+import type { TodayWin } from '../../domain/todayWin'
 import './TodayScreen.css'
 
-/**
- * TODAY — the most important screen in ASCEND.
- *
- * Phase 3B: Shows the active Journey, today's DailyPlan, and Today's Win.
- * Phase 3C: Shows Daily Steps supporting Today's Win.
- */
+type SaveStatus = 'idle' | 'saving' | 'saved'
+
+/** Today is the user's immediate plan: one meaningful win, then its steps. */
 export function TodayScreen() {
+  const navigate = useNavigate()
   const [journey, setJourney] = useState<Journey | null>(null)
   const [plan, setPlan] = useState<DailyPlan | null>(null)
   const [win, setWin] = useState<TodayWin | null>(null)
   const [steps, setSteps] = useState<DailyStep[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{ problem: string; message: string } | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
-  // Win input state
   const [editText, setEditText] = useState('')
   const [editError, setEditError] = useState<string | undefined>()
-
-  // Step input state
+  const [winStatus, setWinStatus] = useState<SaveStatus>('idle')
   const [editStepText, setEditStepText] = useState('')
   const [editStepError, setEditStepError] = useState<string | undefined>()
-
-  // Step editing state
+  const [stepStatus, setStepStatus] = useState<SaveStatus>('idle')
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [stepDraftText, setStepDraftText] = useState('')
   const [isEditingWin, setIsEditingWin] = useState(false)
@@ -45,60 +47,45 @@ export function TodayScreen() {
     async function loadToday() {
       setIsLoading(true)
       setError(null)
-
-      const planResult = await getOrCreateTodayPlan(
-        defaultJourneyRepository,
-        defaultDailyPlanRepository,
-      )
-
+      const result = await getOrCreateTodayPlan(defaultJourneyRepository, defaultDailyPlanRepository)
       if (cancelled) return
 
-      if (planResult.ok) {
+      if (result.ok) {
         setJourney(defaultJourneyRepository.loadActive())
-        setPlan(planResult.plan)
-
-        // Load today's win
-        const todayWin = loadTodayWin(defaultDailyPlanRepository, defaultTodayWinRepository, defaultJourneyRepository)
-        setWin(todayWin)
-
-        // Load today's steps
-        const todaySteps = loadDailySteps(defaultDailyPlanRepository, defaultDailyStepsRepository, defaultJourneyRepository)
-        setSteps(todaySteps)
+        setPlan(result.plan)
+        setWin(loadTodayWin(defaultDailyPlanRepository, defaultTodayWinRepository, defaultJourneyRepository))
+        setSteps(loadDailySteps(defaultDailyPlanRepository, defaultDailyStepsRepository, defaultJourneyRepository))
       } else {
-        setError(planResult.message)
+        setError({ problem: result.problem, message: result.message })
       }
-
       setIsLoading(false)
     }
 
     void loadToday()
-
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   const handleSetWin = async (text: string) => {
     setEditError(undefined)
-    const result = await setTodayWin(
-      defaultJourneyRepository,
-      defaultDailyPlanRepository,
-      defaultTodayWinRepository,
-      text,
-    )
+    setWinStatus('saving')
+    const result = await setTodayWin(defaultJourneyRepository, defaultDailyPlanRepository, defaultTodayWinRepository, text)
 
     if (result.ok) {
       setWin(result.win)
       setEditText('')
       setIsEditingWin(false)
+      setWinStatus('saved')
     } else {
       setEditError(result.message)
+      setWinStatus('idle')
     }
   }
 
-  // Step handlers
   const handleAddStep = async (text: string) => {
     setEditStepError(undefined)
+    setStepStatus('saving')
     const result = await addDailyStep(
       defaultDailyPlanRepository,
       defaultDailyStepsRepository,
@@ -109,16 +96,17 @@ export function TodayScreen() {
 
     if (result.ok) {
       setSteps(result.steps)
-      setEditingStepId(null)
-      setStepDraftText('')
       setEditStepText('')
+      setStepStatus('saved')
     } else {
       setEditStepError(result.message)
+      setStepStatus('idle')
     }
   }
 
   const handleEditStep = async (stepId: string, text: string) => {
     setEditStepError(undefined)
+    setStepStatus('saving')
     const result = await editDailyStep(
       defaultDailyStepsRepository,
       defaultDailyPlanRepository,
@@ -132,12 +120,16 @@ export function TodayScreen() {
       setSteps(result.steps)
       setEditingStepId(null)
       setStepDraftText('')
+      setStepStatus('saved')
     } else {
       setEditStepError(result.message)
+      setStepStatus('idle')
     }
   }
 
   const handleRemoveStep = async (stepId: string) => {
+    setEditStepError(undefined)
+    setStepStatus('saving')
     const result = await removeDailyStep(
       defaultDailyStepsRepository,
       defaultDailyPlanRepository,
@@ -148,206 +140,196 @@ export function TodayScreen() {
 
     if (result.ok) {
       setSteps(result.steps)
+      setStepStatus('saved')
     } else {
       setEditStepError(result.message)
+      setStepStatus('idle')
     }
-  }
-
-  const startEditingStep = (step: DailyStep) => {
-    setEditingStepId(step.id)
-    setStepDraftText(step.text)
-    setEditStepError(undefined)
   }
 
   if (isLoading) {
     return (
-      <>
+      <div className="today" aria-busy="true">
         <ScreenHeader title="Today">
           <p>Loading today&rsquo;s plan&hellip;</p>
         </ScreenHeader>
-        <Card>
-          <EmptyState title="Loading&hellip;" description="" />
+        <Card className="today__section">
+          <div className="today__steps-content" aria-hidden="true">
+            <Skeleton width="8rem" height="1.5rem" />
+            <Skeleton height="2rem" />
+            <Skeleton width="7rem" height="2.75rem" />
+          </div>
+          <p className="visually-hidden" role="status">Loading today&rsquo;s plan&hellip;</p>
         </Card>
-      </>
+      </div>
     )
   }
 
   if (error || !journey || !plan) {
+    const noJourney = error?.problem === 'no-journey'
     return (
-      <>
+      <div className="today">
         <ScreenHeader title="Today">
-          <p>No active Journey</p>
+          <p>{noJourney ? 'Your next meaningful action starts with a Journey.' : 'Today\'s plan is temporarily unavailable.'}</p>
         </ScreenHeader>
-        <Card>
-          <EmptyState
-            title="No Journey yet"
-            description={error ?? 'Start onboarding to create your first Journey.'}
-          />
+        <Card className="today__section">
+          {noJourney ? (
+            <EmptyState
+              title="No Journey yet"
+              description="Start onboarding to create your first Journey."
+              action={<Button onClick={() => void navigate('/onboarding')}>Start onboarding</Button>}
+            />
+          ) : (
+            <ErrorState
+              title="We couldn&rsquo;t load today&rsquo;s plan"
+              description={error?.message ?? 'Try again. Your saved work is still here.'}
+              action={<Button variant="secondary" onClick={() => setReloadKey((key) => key + 1)} leadingIcon={<Icon name="retry" size={18} />}>Try again</Button>}
+            />
+          )}
         </Card>
-      </>
+      </div>
     )
   }
 
-  const goalText = journey.goal.text
   const formattedDate = formatLocalDate(plan.localDate)
 
   return (
-    <>
+    <div className="today">
       <ScreenHeader title="Today" eyebrow={formattedDate}>
-        <p className="text-muted" style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-          Your Journey
-        </p>
-        <p style={{ fontWeight: 500 }}>{goalText}</p>
+        <h2 className="today__journey-label">Your Journey</h2>
+        <p className="today__journey-goal">{journey.goal.text}</p>
       </ScreenHeader>
 
-      <Card>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--color-text)' }}>
-            TODAY&rsquo;S WIN
-          </p>
-          {win && !isEditingWin ? (
-            <>
-              <p style={{ fontSize: '1.125rem', fontWeight: 500, marginBottom: '1rem', wordBreak: 'break-word' }}>
-                {win.text}
-              </p>
-              <Button
-                variant="quiet"
-                onClick={() => {
-                  setEditText(win.text)
-                  setEditError(undefined)
-                  setIsEditingWin(true)
-                }}
-              >
-                Edit
-              </Button>
-            </>
-          ) : (
-            <>
-              {!win ? <p className="text-muted" style={{ marginBottom: '1rem' }}>What would make today a win?</p> : null}
-              <TextField
-                label="Today's Win"
-                value={editText}
-                onChange={(e) => setEditText(e.target.value)}
-                placeholder="Deploy the auth flow"
-                error={editError}
-              />
-              <div style={{ marginTop: '0.75rem' }}>
-                <Button onClick={() => void handleSetWin(editText)} disabled={editText.trim() === ''}>
-                  {win ? 'Save Today’s Win' : 'Set Today’s Win'}
-                </Button>
-                {win ? <Button variant="quiet" onClick={() => { setIsEditingWin(false); setEditText(''); setEditError(undefined) }}>Cancel</Button> : null}
-              </div>
-            </>
-          )}
-        </div>
-      </Card>
-
-      {/* Daily Steps Section */}
-      <Card>
-        <div style={{ marginBottom: '1rem' }}>
-          <p style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem', color: 'var(--color-text)' }}>
-            TODAY&rsquo;S STEPS
-          </p>
-          {!win ? (
-            <p className="text-muted" style={{ marginBottom: '1rem' }}>
-              Set your Today&rsquo;s Win first to add steps.
-            </p>
-          ) : (
-            <>
-              {steps.length === 0 ? (
-                <p className="text-muted" style={{ marginBottom: '1rem' }}>
-                  Add at least 2 small actions that move today&rsquo;s Win forward.
-                </p>
-              ) : (
-                <>
-                  <p className="text-muted" style={{ marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                    {steps.length} of 4 steps
+      <section className="today__section" aria-labelledby="today-win-heading">
+        <Card className="today__win-card">
+          <div className="today__win-content">
+            <h2 className="today__section-title" id="today-win-heading">Today&rsquo;s Win</h2>
+            {win && !isEditingWin ? (
+              <>
+                <p className="today__win-value">{win.text}</p>
+                <div className="today__actions">
+                  <Button
+                    variant="quiet"
+                    leadingIcon={<Icon name="edit" size={18} />}
+                    onClick={() => {
+                      setEditText(win.text)
+                      setEditError(undefined)
+                      setWinStatus('idle')
+                      setIsEditingWin(true)
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <p className="today__status today__feedback" role="status" aria-live="polite">
+                    {winStatus === 'saved' ? 'Saved.' : ''}
                   </p>
-                  {steps.map((step, index) => editingStepId === step.id ? (
-                    <div key={step.id} style={{ marginBottom: '0.75rem' }}>
-                      <TextField
-                        label={`Edit step ${index + 1}`}
-                        value={stepDraftText}
-                        onChange={(event) => setStepDraftText(event.target.value)}
-                        error={editStepError}
-                      />
-                      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
-                        <Button onClick={() => void handleEditStep(step.id, stepDraftText)} disabled={stepDraftText.trim() === ''}>Save</Button>
-                        <Button variant="quiet" onClick={() => { setEditingStepId(null); setStepDraftText(''); setEditStepError(undefined) }}>Cancel</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                      <span style={{
-                        flexShrink: 0,
-                        width: '1.5rem',
-                        height: '1.5rem',
-                        borderRadius: '50%',
-                        border: '2px solid var(--color-primary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        color: 'var(--color-primary)',
-                        backgroundColor: 'transparent',
-                      }}>
-                        {index + 1}
-                      </span>
-                      <p style={{ flex: 1, fontSize: '1rem', margin: 0, wordBreak: 'break-word' }}>
-                        {step.text}
-                      </p>
-                      <Button variant="quiet" onClick={() => startEditingStep(step)} aria-label={`Edit step ${index + 1}`}>
-                        Edit
-                      </Button>
-                      <Button variant="quiet" onClick={() => void handleRemoveStep(step.id)} aria-label={`Remove step ${index + 1}`}>
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                </>
-              )}
-              {steps.length < 4 && win && (
-                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
-                  <TextField
-                    label="Add a step"
-                    value={editStepText}
-                    onChange={(e) => setEditStepText(e.target.value)}
-                    placeholder="Fix the onboarding routing bug"
-                    error={editStepError}
-                  />
-                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
-                    <Button onClick={() => void handleAddStep(editStepText)} disabled={editStepText.trim() === '' || steps.length >= 4}>
-                      Add Step
-                    </Button>
-                    <p className="text-muted" style={{ margin: 0, alignSelf: 'center', fontSize: '0.875rem' }}>
-                      {steps.length < 2 ? 'Add at least 2 steps' : steps.length >= 4 ? 'Maximum 4 steps' : ''}
-                    </p>
-                  </div>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      </Card>
+              </>
+            ) : (
+              <>
+                {!win ? <p className="today__hint">What would make today a win?</p> : null}
+                <TextField
+                  label="Today&rsquo;s Win"
+                  value={editText}
+                  onChange={(event) => setEditText(event.target.value)}
+                  placeholder="Deploy the auth flow"
+                  error={editError}
+                />
+                <div className="today__actions">
+                  <Button
+                    loading={winStatus === 'saving'}
+                    onClick={() => void handleSetWin(editText)}
+                    disabled={editText.trim() === ''}
+                    leadingIcon={<Icon name="save" size={18} />}
+                  >
+                    {win ? 'Save Today\'s Win' : 'Set Today\'s Win'}
+                  </Button>
+                  {win ? <Button variant="quiet" leadingIcon={<Icon name="close" size={18} />} onClick={() => { setIsEditingWin(false); setEditText(''); setEditError(undefined); setWinStatus('idle') }}>Cancel</Button> : null}
+                  <p className="today__status today__feedback" role="status" aria-live="polite">
+                    {winStatus === 'saved' ? 'Saved.' : ''}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+      </section>
 
-    </>
+      <section className="today__section" aria-labelledby="today-steps-heading">
+        <Card className="today__steps-card">
+          <div className="today__steps-content">
+            <h2 className="today__section-title" id="today-steps-heading">Today&rsquo;s Steps</h2>
+            {!win ? (
+              <p className="today__hint">Set your Today&rsquo;s Win first to add steps.</p>
+            ) : (
+              <>
+                {steps.length === 0 ? <p className="today__hint">Add at least 2 small actions that move Today&rsquo;s Win forward.</p> : null}
+                {steps.length > 0 ? (
+                  <>
+                    <p className="today__step-count">{steps.length} of 4 steps</p>
+                    <ol className="today__step-list">
+                      {steps.map((step, index) => (
+                        <li className="today__step-row" key={step.id}>
+                          <span className="today__step-number" aria-hidden="true">{index + 1}</span>
+                          {editingStepId === step.id ? (
+                            <div className="today__step-main">
+                              <TextField
+                                label={'Edit step ' + (index + 1)}
+                                value={stepDraftText}
+                                onChange={(event) => setStepDraftText(event.target.value)}
+                                error={editStepError}
+                              />
+                              <div className="today__step-actions">
+                                <Button loading={stepStatus === 'saving'} onClick={() => void handleEditStep(step.id, stepDraftText)} disabled={stepDraftText.trim() === ''} leadingIcon={<Icon name="save" size={18} />}>Save</Button>
+                                <Button variant="quiet" leadingIcon={<Icon name="close" size={18} />} onClick={() => { setEditingStepId(null); setStepDraftText(''); setEditStepError(undefined); setStepStatus('idle') }}>Cancel</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="today__step-main">
+                                <p className="today__step-text">{step.text}</p>
+                              </div>
+                              <div className="today__step-actions">
+                                <Button variant="quiet" leadingIcon={<Icon name="edit" size={18} />} onClick={() => { setEditingStepId(step.id); setStepDraftText(step.text); setEditStepError(undefined); setStepStatus('idle') }} aria-label={'Edit step ' + (index + 1)}>Edit</Button>
+                                <Button variant="quiet" leadingIcon={<Icon name="remove" size={18} />} onClick={() => void handleRemoveStep(step.id)} aria-label={'Remove step ' + (index + 1)}>Remove</Button>
+                              </div>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  </>
+                ) : null}
+
+                {steps.length < 4 ? (
+                  <div className="today__add-step">
+                    <TextField
+                      label="Add a step"
+                      value={editStepText}
+                      onChange={(event) => setEditStepText(event.target.value)}
+                      placeholder="Fix the onboarding routing bug"
+                      error={editStepError}
+                    />
+                    <div className="today__actions">
+                      <Button loading={stepStatus === 'saving'} onClick={() => void handleAddStep(editStepText)} disabled={editStepText.trim() === '' || steps.length >= 4} leadingIcon={<Icon name="plus" size={18} />}>Add Step</Button>
+                      <p className="today__step-minimum">{steps.length < 2 ? 'Add at least 2 steps' : 'Up to 4 steps'}</p>
+                    </div>
+                  </div>
+                ) : null}
+                <p className="today__status today__feedback" role="status" aria-live="polite">
+                  {stepStatus === 'saved' ? 'Step changes saved.' : ''}
+                </p>
+              </>
+            )}
+          </div>
+        </Card>
+      </section>
+    </div>
   )
 }
 
-/**
- * Formats a LocalDate (YYYY-MM-DD) into a human-readable string.
- * Example: "2026-10-01" → "October 1, 2026"
- */
 function formatLocalDate(localDate: string): string {
   const parts = localDate.split('-')
-  const year = Number(parts[0])
-  const month = Number(parts[1])
-  const day = Number(parts[2])
-  const date = new Date(Date.UTC(year, month - 1, day))
-  return date.toLocaleDateString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  const date = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])))
+  return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })
 }

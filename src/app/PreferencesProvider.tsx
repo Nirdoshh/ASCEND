@@ -87,7 +87,10 @@ export function PreferencesProvider({
     } else {
       root.setAttribute('data-theme', preferences.theme)
     }
-  }, [preferences.theme])
+
+    const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    themeColor?.setAttribute('content', resolvedTheme === 'dark' ? '#111110' : '#fafaf9')
+  }, [preferences.theme, resolvedTheme])
 
   const value = useMemo<PreferencesContextValue>(
     () => ({ preferences, theme: preferences.theme, resolvedTheme, setTheme, cycleTheme, storageStatus }),

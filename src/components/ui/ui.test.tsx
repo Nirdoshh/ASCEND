@@ -40,6 +40,16 @@ describe('Button', () => {
     expect(button).toBeDisabled()
   })
 
+  it('cannot override loading safety with disabled={false}', () => {
+    render(
+      <Button loading disabled={false}>
+        Saving
+      </Button>,
+    )
+
+    expect(screen.getByRole('button')).toBeDisabled()
+  })
+
   it('exposes aria-busy while loading', () => {
     render(<Button loading>Saving</Button>)
 
@@ -105,6 +115,17 @@ describe('ProgressBar', () => {
       'aria-valuetext',
       '6 of 7 days active, 86% consistency',
     )
+  })
+
+  it('keeps an accessible label when the visible value is hidden', () => {
+    render(<ProgressBar label="Today's steps" value={2} max={4} showValue={false} />)
+
+    const bar = screen.getByRole('progressbar', { name: /today's steps/i })
+    const labelledBy = bar.getAttribute('aria-labelledby')
+
+    expect(labelledBy).toBeTruthy()
+    expect(document.getElementById(labelledBy ?? '')).toHaveTextContent("Today's steps")
+    expect(screen.queryByText('2 of 4')).not.toBeInTheDocument()
   })
 })
 

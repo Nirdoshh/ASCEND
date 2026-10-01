@@ -14,7 +14,22 @@
  * like a single family.
  */
 
-export type IconName = 'today' | 'journey' | 'progress' | 'you' | 'sun' | 'moon' | 'system'
+export type IconName =
+  | 'today'
+  | 'journey'
+  | 'progress'
+  | 'you'
+  | 'sun'
+  | 'moon'
+  | 'system'
+  | 'plus'
+  | 'check'
+  | 'edit'
+  | 'remove'
+  | 'close'
+  | 'retry'
+  | 'alert'
+  | 'save'
 
 export interface IconProps {
   name: IconName
@@ -93,6 +108,59 @@ const PATHS = {
     <>
       <rect x="2.5" y="4.5" width="19" height="12" rx="1.5" />
       <path d="M8 20h8" />
+    </>
+  ),
+
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+
+  check: <path d="m5 12.5 4.25 4.25L19 7" />,
+
+  edit: (
+    <>
+      <path d="m4 16.5-.75 3.25L6.5 19l10.75-10.75-2.5-2.5z" />
+      <path d="m13.25 7.25 2.5 2.5M14.75 5.75l1-1a1.75 1.75 0 0 1 2.5 2.5l-1 1" />
+    </>
+  ),
+
+  remove: (
+    <>
+      <path d="M5 7h14" />
+      <path d="M10 11v5M14 11v5" />
+      <path d="M7 7l.75 13h8.5L17 7M9 7V4.5h6V7" />
+    </>
+  ),
+
+  close: (
+    <>
+      <path d="m6 6 12 12M18 6 6 18" />
+    </>
+  ),
+
+  retry: (
+    <>
+      <path d="M20 11a8 8 0 0 0-14.5-4L4 9" />
+      <path d="M4 4v5h5" />
+      <path d="M4 13a8 8 0 0 0 14.5 4L20 15" />
+      <path d="M20 20v-5h-5" />
+    </>
+  ),
+
+  alert: (
+    <>
+      <path d="M12 4 21 20H3z" />
+      <path d="M12 9v5M12 17.5h.01" />
+    </>
+  ),
+
+  save: (
+    <>
+      <path d="M5 4h11l3 3v13H5z" />
+      <path d="M8 4v6h8V4M8 20v-6h8v6" />
     </>
   ),
 } satisfies Record<IconName, React.ReactElement>

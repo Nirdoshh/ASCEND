@@ -15,13 +15,17 @@
 ;(function () {
   try {
     var raw = window.localStorage.getItem('ascend:preferences:v1')
-    if (!raw) return
-
-    var parsed = JSON.parse(raw)
+    var parsed = raw ? JSON.parse(raw) : null
     var theme = parsed && parsed.theme
     if (theme === 'light' || theme === 'dark') {
       document.documentElement.setAttribute('data-theme', theme)
     }
+
+    var resolved = theme === 'dark' || (theme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ? 'dark'
+      : 'light'
+    var meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#111110' : '#fafaf9')
   } catch (error) {
     // A corrupt or unavailable store must never block the app from
     // rendering. We fall back to the CSS system-colour defaults.

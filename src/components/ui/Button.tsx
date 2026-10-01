@@ -68,7 +68,9 @@ export function Button({
         loading && 'button--loading',
         className,
       )}
-      disabled={disabled ?? loading}
+      // Loading always wins over an explicit `disabled={false}`. A save
+      // operation must be impossible to double-submit from any call site.
+      disabled={disabled || loading}
       aria-busy={loading || undefined}
     >
       {loading ? (

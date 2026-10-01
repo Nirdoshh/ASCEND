@@ -26,10 +26,10 @@
 }
 
 .app-shell__main:focus {
-  /* The main region receives focus from the skip link. It must not
-   * draw a focus ring around the whole page, but it must not be
-   * invisible either: a subtle ring confirms where focus landed. */
-  outline: none;
+  /* The main region receives focus from the skip link. Keep a restrained
+   * ring so keyboard users can see where focus landed. */
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
 }
 
 /* Route error ---------------------------------------------------------- */

@@ -59,7 +59,13 @@ export function ProgressBar({
             {safeValue} of {safeMax}
           </span>
         </div>
-      ) : null}
+      ) : (
+        // Keep the labelled-by target in the accessibility tree even when the
+        // visible count is intentionally hidden.
+        <span className="visually-hidden" id={`${id}-label`}>
+          {label}
+        </span>
+      )}
 
       <div
         className={cn('progress__track', `progress__track--${size}`)}
