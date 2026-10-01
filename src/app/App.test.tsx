@@ -19,29 +19,30 @@ import { App } from '../App'
  * Rendering the root with no router wrapper of our own is what turns
  * "some component needs router context" into a failing assertion instead
  * of a blank page.
+ *
+ * Note: The routing behavior (redirect to onboarding when no journey exists)
+ * is tested in `routes.test.tsx` and `startup.test.ts`. This test only
+ * verifies the App component tree renders without router context errors.
  */
 describe('App', () => {
   it('renders without an unhandled router-context error', () => {
     expect(() => render(<App />)).not.toThrow()
   })
 
-  it('renders the shell and the Today screen at the default route', () => {
+  it('renders the onboarding screen at the default route when no journey exists', () => {
     render(<App />)
 
-    expect(screen.getByRole('navigation', { name: /main/i })).toBeInTheDocument()
-    expect(screen.getByRole('main')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Today', level: 1 })).toBeInTheDocument()
+    // With no journey and no draft, the startup loader redirects to onboarding
+    expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /start my journey/i })).toBeInTheDocument()
   })
 
-  it('navigates between routes through the real router', async () => {
-    // The router is created at module load and captures the location then,
-    // so pushState afterwards cannot move it. Clicking the nav is the
-    // honest way to exercise the real router's navigation.
+  it('navigates between onboarding routes through the real router', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('link', { name: /journey/i }))
+    await user.click(screen.getByRole('button', { name: /start my journey/i }))
 
-    expect(screen.getByRole('heading', { name: 'Journey', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'What do you want to improve?', level: 1 })).toBeInTheDocument()
   })
 })

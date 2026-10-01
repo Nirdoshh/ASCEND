@@ -1,5 +1,5 @@
-import { render, screen, cleanup } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Route smoke test.
@@ -16,7 +16,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  * The router is created when `app/routes` is first evaluated and captures
  * `window.location` at that moment, so each case resets modules, sets the
  * URL, then imports `App` fresh.
+ *
+ * For the root (/) and /today routes, the startup loaders redirect based
+ * on stored data. With no Journey and no draft (the test default), both
+ * redirect to /onboarding.
  */
+beforeEach(() => {
+  window.localStorage.clear()
+})
+
 afterEach(() => {
   cleanup()
   vi.resetModules()
@@ -30,9 +38,17 @@ async function renderAt(path: string) {
 
 describe('routes', () => {
   const cases = [
-    { path: '/', heading: 'Today' },
-    // "/today" is a deliberate alias that redirects to the index route.
-    { path: '/today', heading: 'Today' },
+    /*
+     * Root and /today redirect to onboarding when no Journey exists.
+     * These test the startup routing decision for a first-time user.
+     */
+    { path: '/', heading: 'Become the person you want to be.' },
+    { path: '/today', heading: 'Become the person you want to be.' },
+
+    /*
+     * AppShell routes render inside the shell. With no Journey they show
+     * empty states, but the shell (header, nav) is still present.
+     */
     { path: '/journey', heading: 'Journey' },
     { path: '/progress', heading: 'Progress' },
     { path: '/you', heading: 'You' },
@@ -41,10 +57,10 @@ describe('routes', () => {
 
     /*
      * Onboarding is registered as a sibling of the main shell, not a
-     * child of it, so these two prove that wiring specifically. They
-     * also cover the case that broke in production in Phase 1: a cold
-     * load of a nested client route with no draft stored at all, which
-     * must render a usable screen rather than a blank page.
+     * child of it, so these prove that wiring specifically. They also
+     * cover the case that broke in production in Phase 1: a cold load
+     * of a nested client route with no draft stored at all, which must
+     * render a usable screen rather than a blank page.
      */
     { path: '/onboarding', heading: 'Become the person you want to be.' },
     { path: '/onboarding/areas', heading: 'What do you want to improve?' },
@@ -66,7 +82,9 @@ describe('routes', () => {
     it(`renders ${path}`, async () => {
       await renderAt(path)
 
-      expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
+      })
     })
   }
 

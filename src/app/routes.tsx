@@ -13,32 +13,42 @@ import { WelcomeScreen } from '../features/onboarding/WelcomeScreen'
 import { WhyScreen } from '../features/onboarding/WhyScreen'
 import { JourneyScreen } from '../features/journey/JourneyScreen'
 import { ProgressScreen } from '../features/progress/ProgressScreen'
-import { TodayScreen } from '../features/today/TodayScreen'
 import { YouScreen } from '../features/you/YouScreen'
 import { NotFoundScreen } from '../features/notfound/NotFoundScreen'
+import { rootLoader, todayLoader, RootRedirect, TodayRedirect } from './StartupRedirect'
 
 /**
  * Routing.
  *
- * One layout route (AppShell) owns the header and the navigation; the
- * four product screens are its children. That is the whole hierarchy,
- * and it maps one-to-one onto the approved information architecture.
+ * The AppShell route owns the header and navigation. Its index child (/)
+ * runs a startup loader to decide whether to show Today or redirect to
+ * onboarding. The /today route has its own loader for direct access.
  *
- * Why a router at all, with only four screens: because a browser URL
- * is the cheapest state container we own. It survives refresh, it works
- * with the back button, it can be linked to, and it costs no
- * application state. Those are properties we would otherwise hand-roll
- * badly.
+ * Onboarding is a SIBLING of AppShell, not a child of it. Someone who has
+ * not picked a Growth Area has no Journey yet, so the four-screen
+ * navigation would be four empty screens promising things that do not exist.
  *
- * `not_found_handling: "single-page-application"` in wrangler.jsonc
- * makes a deep link to /journey reach this client router on a cold
- * load, which is why a production deploy does not 404 on refresh.
+ * `not_found_handling: "single-page-application"` in wrangler.jsonc makes
+ * a deep link to /journey reach this client router on a cold load.
  */
 export const router = createBrowserRouter([
+  /*
+   * Main application shell — the root layout.
+   *
+   * Its index child (/) runs the startup loader to decide the destination.
+   */
   {
+    path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <TodayScreen /> },
+      /*
+       * Index route: decides where a user landing on / should go.
+       *
+       * The loader runs synchronously on every cold load and refresh.
+       * The element performs the redirect based on the loader's decision.
+       */
+      { index: true, loader: rootLoader, element: <RootRedirect /> },
+
       { path: 'journey', element: <JourneyScreen /> },
       { path: 'progress', element: <ProgressScreen /> },
       { path: 'you', element: <YouScreen /> },
@@ -50,14 +60,28 @@ export const router = createBrowserRouter([
       { path: 'design-system', element: <DesignSystemScreen /> },
 
       /*
-       * Aliases we will want in Phase 2+ but do not need yet. Kept as a
-       * redirect rather than a duplicate screen so there is exactly one
-       * source of truth for each route.
+       * Alias for /today — redirects to the index route.
+       * This is a child of AppShell so it renders inside the shell.
        */
       { path: 'today', element: <Navigate to="/" replace /> },
 
       { path: '*', element: <NotFoundScreen /> },
     ],
+  },
+
+  /*
+   * /today route: decides whether direct access to /today is allowed.
+   *
+   * If an active Journey exists, redirects to / (which renders TodayScreen
+   * inside AppShell). If not, redirects to onboarding/resume.
+   *
+   * This is a TOP-LEVEL route (sibling of AppShell) so it can run its
+   * loader before entering the shell.
+   */
+  {
+    path: '/today',
+    loader: todayLoader,
+    element: <TodayRedirect />,
   },
 
   /*

@@ -86,8 +86,9 @@ describe('BootErrorBoundary', () => {
   it('does not interfere with the normal application', () => {
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Today', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('navigation', { name: /main/i })).toBeInTheDocument()
+    // With no journey and no draft, the startup loader redirects to onboarding
+    expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /start my journey/i })).toBeInTheDocument()
   })
 
   // 2 + 3 + 5. A child throws during render; the boundary catches it and
