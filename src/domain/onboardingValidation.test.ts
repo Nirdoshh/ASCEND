@@ -8,14 +8,20 @@ import {
   createOnboardingDraft,
   ONBOARDING_STEPS,
   selectGrowthArea,
+  setGoal,
+  setWhy,
   type OnboardingDraft,
 } from './onboardingDraft'
 import {
   answeredSteps,
+  isGoalStepValid,
   isGrowthAreaStepValid,
+  isWhyStepValid,
   validateOnboardingDraft,
   type OnboardingProblem,
+  type StepValidation,
 } from './onboardingValidation'
+import { MAX_GOAL_LENGTH, MAX_WHY_LENGTH } from './personalAnswer'
 
 const T0 = '2026-10-01T09:00:00.000Z'
 
@@ -36,6 +42,14 @@ function withFitness(): OnboardingDraft {
   return selectGrowthArea(createOnboardingDraft(T0), FITNESS.id, T0)
 }
 
+function withGoal(draft: OnboardingDraft, text: string): OnboardingDraft {
+  return setGoal(draft, text, T0)
+}
+
+function withWhy(draft: OnboardingDraft, text: string): OnboardingDraft {
+  return setWhy(draft, text, T0)
+}
+
 /** Force a field, to build drafts that no honest UI could produce. */
 function withField<K extends keyof OnboardingDraft>(
   draft: OnboardingDraft,
@@ -45,7 +59,9 @@ function withField<K extends keyof OnboardingDraft>(
   return { ...draft, [key]: value }
 }
 
-function problemOf(result: ReturnType<typeof validateOnboardingDraft>): OnboardingProblem {
+function problemOf(
+  result: ReturnType<typeof validateOnboardingDraft> | StepValidation,
+): OnboardingProblem {
   if (result.valid) throw new Error('expected an invalid draft')
   return result.problem
 }
@@ -109,6 +125,170 @@ describe('isGrowthAreaStepValid', () => {
   })
 })
 
+describe('isGoalStepValid and isWhyStepValid', () => {
+  // The two free-text steps share one rule set, so most cases are run
+  // against both. Writing them once keeps a divergence between the two
+  // from being possible, which is the point of sharing the implementation.
+  const steps = [
+    {
+      label: 'goal',
+      validate: isGoalStepValid,
+      write: setGoal,
+      limit: MAX_GOAL_LENGTH,
+      unanswered: 'Tell us what you would love to achieve.',
+      tooLong: `That is a bit long. Keep your goal to ${MAX_GOAL_LENGTH} characters or fewer.`,
+    },
+    {
+      label: 'why',
+      validate: isWhyStepValid,
+      write: setWhy,
+      limit: MAX_WHY_LENGTH,
+      unanswered: 'Tell us why this matters to you.',
+      tooLong: `That is a bit long. Keep it to ${MAX_WHY_LENGTH} characters or fewer.`,
+    },
+  ] as const
+
+  for (const step of steps) {
+    describe(`the ${step.label} step`, () => {
+      const draftWith = (text: string) => step.write(createOnboardingDraft(T0), text, T0)
+
+      it('is not valid when there is no draft at all', () => {
+        expect(step.validate(null)).toEqual({
+          valid: false,
+          problem: 'unanswered',
+          message: step.unanswered,
+        })
+      })
+
+      it('is not valid when the question has not been asked', () => {
+        expect(step.validate(createOnboardingDraft(T0))).toEqual({
+          valid: false,
+          problem: 'unanswered',
+          message: step.unanswered,
+        })
+      })
+
+      it('is valid with one real sentence', () => {
+        expect(step.validate(draftWith('Run my first 10K'))).toEqual({ valid: true })
+      })
+
+      it('is not valid when the box is emptied again', () => {
+        // The setter removes the field, so this is the same state as
+        // never having answered. Asserted separately because "delete the
+        // key" is the behaviour that keeps it true.
+        const draft = step.write(draftWith('Run my first 10K'), '   ', T0)
+
+        expect(step.validate(draft)).toEqual({
+          valid: false,
+          problem: 'unanswered',
+          message: step.unanswered,
+        })
+      })
+
+      it('is not valid for stored whitespace, which storage could produce', () => {
+        // Unreachable through the app, reachable by hand-editing storage.
+        // A field of spaces is not what anybody meant, and refusing it is
+        // better than passing the step on it.
+        const draft: OnboardingDraft = {
+          ...createOnboardingDraft(T0),
+          [step.label]: { text: '   \n  ' },
+        }
+
+        expect(step.validate(draft)).toEqual({
+          valid: false,
+          problem: 'unanswered',
+          message: step.unanswered,
+        })
+      })
+
+      it('validates the trimmed length, not the raw one', () => {
+        // The limit is about how much the user wrote, not how much they
+        // padded it with. Rejecting a padded-but-legal sentence would make
+        // the message lie about the cause of the problem.
+        const atLimit = 'x'.repeat(step.limit)
+        const draft: OnboardingDraft = {
+          ...createOnboardingDraft(T0),
+          [step.label]: { text: `    ${atLimit}    ` },
+        }
+
+        expect(step.validate(draft)).toEqual({ valid: true })
+      })
+
+      it('is valid at exactly the limit', () => {
+        expect(step.validate(draftWith('x'.repeat(step.limit)))).toEqual({ valid: true })
+      })
+
+      it('is not valid one character past the limit', () => {
+        // `too-long`, never `unanswered`. The user HAS answered, and saying
+        // otherwise would leave them retyping a sentence they already wrote
+        // correctly.
+        expect(step.validate(draftWith('x'.repeat(step.limit + 1)))).toEqual({
+          valid: false,
+          problem: 'too-long',
+          message: step.tooLong,
+        })
+      })
+
+      it('does not shorten an over-long answer to make it valid', () => {
+        // The fix belongs to the user. Storing a truncated sentence would
+        // lose the end of what they wrote and then pass the step on it.
+        const long = 'x'.repeat(step.limit + 40)
+        const draft = draftWith(long)
+
+        expect(draft[step.label]).toEqual({ text: long })
+        expect(step.validate(draft).valid).toBe(false)
+      })
+
+      it('accepts punctuation, emoji and any language unchanged', () => {
+        const answers = [
+          'Why not? Really — why not!! (seriously)',
+          'Learn three songs 🎹 and ride a bike 🚴',
+          '跑我的第一個馬拉松',
+          'Освоить три песни, сыграть их наизусть',
+        ]
+
+        for (const answer of answers) {
+          expect(step.validate(draftWith(answer)), answer).toEqual({ valid: true })
+          expect(draftWith(answer)[step.label]).toEqual({ text: answer })
+        }
+      })
+
+      it('accepts a one-word answer, because brevity is not a failure', () => {
+        // ASCEND does not grade the content of a goal or a reason. Someone
+        // who writes "Piano" has answered the question, and being told
+        // their answer was insufficient at the moment they are trying to
+        // start would be the opposite of encouragement.
+        expect(step.validate(draftWith('Piano'))).toEqual({ valid: true })
+      })
+
+      it('ignores the step the user happens to be on', () => {
+        const draft = withField(draftWith('Run my first 10K'), 'currentStep', 'welcome')
+        expect(step.validate(draft)).toEqual({ valid: true })
+      })
+    })
+  }
+
+  it('never judges the Goal against the Growth Areas', () => {
+    // One answer covers the whole Journey, so there is nothing to resolve
+    // and nothing to be inconsistent with. A goal written before any area
+    // is chosen is still a valid answer to this question.
+    const draft = setGoal(createOnboardingDraft(T0), 'Run my first 10K', T0)
+
+    expect(isGoalStepValid(draft).valid).toBe(true)
+    expect(isGoalStepValid(setGoal(withFitness(), 'Run my first 10K', T0)).valid).toBe(true)
+  })
+
+  it('keeps one answer’s over-length failure out of the other’s', () => {
+    // Separate limits, separate messages. A 350-character WHY is fine; a
+    // 350-character Goal is not, and the Goal's complaint must not appear
+    // on the WHY screen.
+    const draft = setGoal(setWhy(withFitness(), 'y'.repeat(400), T0), 'x'.repeat(400), T0)
+
+    expect(isWhyStepValid(draft)).toEqual({ valid: true })
+    expect(problemOf(isGoalStepValid(draft))).toBe('too-long')
+  })
+})
+
 describe('validateOnboardingDraft — currentStep means nothing', () => {
   it('refuses a draft that has never started', () => {
     const result = validateOnboardingDraft(null)
@@ -156,30 +336,55 @@ describe('validateOnboardingDraft — currentStep means nothing', () => {
   it('validates a draft whose currentStep is behind the actual answers', () => {
     // The converse of the rule above: a user who selected an area and then
     // went back to step 1 has still answered step 2. Validity is read from
-    // the data, never from the pointer.
+    // the data, never from the pointer. It also proves Phase 2B did not
+    // weaken the gate: the draft is still refused, now at the Goal rather
+    // than at a step that has no rule at all.
     const draft = withField(withFitness(), 'currentStep', 'welcome')
 
-    expect(failure(validateOnboardingDraft(draft)).problem).toBe('not-answered-yet')
+    expect(failure(validateOnboardingDraft(draft)).problem).toBe('unanswered')
     expect(failure(validateOnboardingDraft(draft)).firstIncompleteStep).toBe('goal')
   })
 
   it('reaches the first unbuilt step and says so honestly', () => {
-    // Phase 2A has only a growth-area rule, so `goal` cannot be satisfied.
-    // Reporting `not-answered-yet` rather than `unanswered` keeps our gap
-    // clearly distinguishable from a user who skipped a question.
-    const result = validateOnboardingDraft(withFitness())
+    // Phase 2B has rules for growth-areas, goal and why, so `duration`
+    // cannot be satisfied. Reporting `not-answered-yet` rather than
+    // `unanswered` keeps our gap clearly distinguishable from a user who
+    // skipped a question — and it is the reason a half-built phase cannot
+    // masquerade as a complete one.
+    const result = validateOnboardingDraft(withWhy(withGoal(withFitness(), 'Run my first 10K'), 'Because I can'))
 
     expect(result.valid).toBe(false)
     if (result.valid) return
-    expect(result.firstIncompleteStep).toBe('goal')
+    expect(result.firstIncompleteStep).toBe('duration')
     expect(result.problem).toBe('not-answered-yet')
-    expect(result.message).toBe('The “goal” step has not been built yet, so onboarding cannot be completed.')
+    expect(result.message).toBe(
+      'The “duration” step has not been built yet, so onboarding cannot be completed.',
+    )
+  })
+
+  it('cannot be made valid by this build, and does not pretend otherwise', () => {
+    // The single most important assertion about Phase 2B. A phase that
+    // quietly relaxed validateOnboardingDraft to make itself look finished
+    // would let a Journey be created from a draft with no duration, no
+    // milestones and no daily effort. Two real answers, a satisfied
+    // earlier step and a currentStep that claims the end is not enough.
+    const complete = withField(
+      withWhy(withGoal(withFitness(), 'Run my first 10K'), 'Because I can'),
+      'currentStep',
+      'summary',
+    )
+
+    const result = validateOnboardingDraft(complete)
+
+    expect(result.valid).toBe(false)
+    if (result.valid) return
+    expect(result.firstIncompleteStep).toBe('duration')
   })
 
   it('does not depend on a custom area any more than a suggested one', () => {
     const draft = addCustomGrowthArea(createOnboardingDraft(T0), { id: 'ga_x', name: 'Piano', normalizedName: 'piano' }, T0)
 
-    expect(problemOf(validateOnboardingDraft(draft))).toBe('not-answered-yet')
+    expect(problemOf(validateOnboardingDraft(draft))).toBe('unanswered')
   })
 
   it('does not depend on how the draft was advanced', () => {

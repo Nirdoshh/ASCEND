@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
 import { Button } from '../../components/ui'
+import { hasStartedOnboarding, resumePath } from './resume'
 import { useOnboarding } from './OnboardingDraftProvider'
 import './WelcomeScreen.css'
 
@@ -23,16 +24,25 @@ import './WelcomeScreen.css'
  *
  * The h1 is the promise rather than the wordmark, so a screen reader
  * and a search engine meet the same thing a sighted user reads first.
+ *
+ * RESUMING IS A COMPUTED DECISION, NOT A LABEL
+ *
+ * "Continue where you left off" and "Start my journey" are the same two
+ * buttons pointed at different places, and the wording follows the
+ * destination rather than the other way round. Through Phase 2A this sent
+ * everyone to step 2, which quietly threw away the Goal and the WHY for
+ * anyone who had answered them. See resume.ts for how the destination is
+ * worked out.
  */
 export function WelcomeScreen() {
   const navigate = useNavigate()
   const { draft, begin } = useOnboarding()
 
-  // Someone who already answered a question and came back here — via
-  // the back button, or by reloading on this URL — is offered their
-  // place rather than a fresh start. Discarding their work here would
-  // be the worst possible thing this screen could do.
-  const resuming = draft !== null
+  // A draft existing is not the same as a draft holding any answers.
+  // Someone who pressed the first button and then closed the tab has a
+  // draft and has answered nothing, and "Continue where you left off"
+  // would be a lie for them.
+  const resuming = hasStartedOnboarding(draft)
 
   const onStart = () => {
     begin()
@@ -40,7 +50,7 @@ export function WelcomeScreen() {
     // because a data router may be loading a route in the background.
     // There is nothing to await here — the URL changes synchronously —
     // so the `void` states that rather than silencing a real check.
-    void navigate('/onboarding/areas')
+    void navigate(resuming ? resumePath(draft) : '/onboarding/areas')
   }
 
   return (

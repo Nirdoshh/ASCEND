@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
@@ -11,9 +11,12 @@ import { createWebStorageStore } from '../../data/storage'
 import { ASCEND_ONBOARDING_DRAFT_KEY } from '../../data/storage/keys'
 import { suggestedGrowthAreaId } from '../../domain/growthAreaId'
 import { ONBOARDING_SCHEMA_VERSION } from '../../domain/onboardingDraft'
+import { MAX_GOAL_LENGTH, MAX_WHY_LENGTH } from '../../domain/personalAnswer'
+import { GoalScreen } from './GoalScreen'
 import { GrowthAreasScreen } from './GrowthAreasScreen'
 import { OnboardingLayout } from './OnboardingLayout'
 import { WelcomeScreen } from './WelcomeScreen'
+import { WhyScreen } from './WhyScreen'
 
 /**
  * Onboarding tests, driven the way a person drives the screens.
@@ -35,6 +38,29 @@ import { WelcomeScreen } from './WelcomeScreen'
  */
 
 const QUESTION = 'What do you want to improve?'
+const GOAL_QUESTION = 'What would you love to achieve?'
+const WHY_QUESTION = 'Why does this matter to you?'
+
+/**
+ * Words ASCEND must never use, in any screen.
+ *
+ * Kept here as one list because it is a product rule rather than a
+ * property of any one screen, and the first two onboarding steps are the
+ * only place a growth-focused app is tempted to reach for game language:
+ * it is the vocabulary that makes progress feel like a game rather than
+ * like work.
+ */
+const BANNED_WORDS = [
+  /\bquests?\b/i,
+  /\bXP\b/,
+  /\bpoints?\b/i,
+  /\branks?\b/i,
+  /\bboss\b/i,
+  /\bstreaks?\b/i,
+  /gamif/i,
+  /productiv/i,
+  /onboard/i,
+]
 
 function localStore(): OnboardingDraftRepository {
   return createOnboardingDraftRepository(createWebStorageStore())
@@ -59,19 +85,57 @@ function renderOnboarding(
         children: [
           { index: true, element: <WelcomeScreen /> },
           { path: 'areas', element: <GrowthAreasScreen /> },
+          { path: 'goal', element: <GoalScreen /> },
+          { path: 'why', element: <WhyScreen /> },
         ],
       },
     ],
     { initialEntries: [startAt] },
   )
 
-  return render(<RouterProvider router={router} />)
+  // The router is returned alongside the render result so a test can drive
+  // the browser's own Back and Forward buttons (router.navigate(-1) / (1))
+  // rather than only the in-app Back link.
+  return { ...render(<RouterProvider router={router} />), router }
 }
 
 /** Seeds a stored draft, then mounts the app at `startAt`. */
 function renderWithStoredDraft(stored: unknown, startAt = '/onboarding') {
   window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, JSON.stringify(stored))
   return renderOnboarding({ startAt })
+}
+
+/**
+ * A realistic stored draft: one area chosen, nothing else answered.
+ *
+ * Built from a real suggestion id rather than hand-written, so fixtures
+ * cannot drift away from the shape the app actually writes — which is how
+ * a test ends up proving something true only of a shape nothing produces.
+ */
+function sampleStoredDraft() {
+  return {
+    schemaVersion: ONBOARDING_SCHEMA_VERSION,
+    currentStep: 'growth-areas',
+    selectedGrowthAreaIds: [suggestedGrowthAreaId('fitness')],
+    customGrowthAreas: [],
+    startedAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+  }
+}
+
+/**
+ * The same draft, carrying one answer field.
+ *
+ * `currentStep` is set past the field, which is what a user who pressed
+ * Continue and then came Back would really have — so the tests are
+ * exercising the resume rule at the same time as the storage rule.
+ */
+function storedDraftWith(field: 'goal' | 'why', answer: { text: string }) {
+  return {
+    ...sampleStoredDraft(),
+    currentStep: field === 'goal' ? 'why' : 'duration',
+    [field]: answer,
+  }
 }
 
 function readStoredDraft(): Record<string, unknown> | null {
@@ -142,19 +206,56 @@ describe('the welcome screen', () => {
 
     // Word-boundary patterns, not substrings: "quest" is a substring of
     // "question", which is a perfectly good word to use here.
-    for (const pattern of [
-      /\bquests?\b/i,
-      /\bXP\b/,
-      /\bpoints?\b/i,
-      /\branks?\b/i,
-      /\bboss\b/i,
-      /\bstreaks?\b/i,
-      /gamif/i,
-      /productiv/i,
-      /onboard/i,
-    ]) {
+    for (const pattern of BANNED_WORDS) {
       expect(text, `unexpected jargon matching ${pattern}`).not.toMatch(pattern)
     }
+  })
+
+  it('sends a returning visitor to the step they actually reached', async () => {
+    // The bug this replaced: "Continue where you left off" pointed at
+    // /onboarding/areas for everyone, so a user who had already answered
+    // the Goal and the WHY was dropped back onto the chips.
+    const user = userEvent.setup()
+    const first = renderOnboarding()
+
+    await user.click(screen.getByRole('button', { name: /start my journey/i }))
+    await user.click(await screen.findByRole('button', { name: 'Fitness' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.type(screen.getByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+
+    // A refresh discards React entirely and keeps storage.
+    first.unmount()
+    renderOnboarding()
+
+    await user.click(await screen.findByRole('button', { name: /continue where you left off/i }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })).toBeInTheDocument()
+  })
+
+  it('offers a fresh start to someone whose draft has no answers in it', async () => {
+    // A draft existing is not the same as a draft having been answered.
+    // "Continue where you left off" for a person who has answered nothing
+    // is a lie, and the destination would be the page they are already on.
+    window.localStorage.setItem(
+      ASCEND_ONBOARDING_DRAFT_KEY,
+      JSON.stringify({
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
+        currentStep: 'growth-areas',
+        selectedGrowthAreaIds: [],
+        customGrowthAreas: [],
+        startedAt: '2026-10-01T09:00:00.000Z',
+        updatedAt: '2026-10-01T09:00:00.000Z',
+      }),
+    )
+    const user = userEvent.setup()
+    renderOnboarding()
+
+    await user.click(await screen.findByRole('button', { name: /start my journey/i }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
   })
 
   it('asks for nothing at all before the first question', () => {
@@ -485,9 +586,8 @@ describe('an earlier choice changing never destroys work', () => {
     expect(storedSelection()).toEqual([])
 
     // The definition survives, so re-selecting is instant and the name is
-    // unchanged. This is the future-proofing: a Goal written against this
-    // area in Phase 2B lives outside the selection list too, keyed by this
-    // same id.
+    // unchanged. This is the future-proofing: Phase 2C's milestones are
+    // keyed by this same id, so a toggle here can never orphan one.
     expect(chip('Piano')).toBeInTheDocument()
     await user.click(chip('Piano'))
 
@@ -507,20 +607,36 @@ describe('an earlier choice changing never destroys work', () => {
     expect(storedSelection()).toEqual([suggestedGrowthAreaId('reading')])
   })
 
-  it('never records a goal, duration or effort answer in 2A', async () => {
+  it('never records a duration, milestone or effort answer in 2B', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/areas' })
 
     await user.click(chip('Fitness'))
     await user.type(await openComposer(user), 'Piano')
     await user.click(screen.getByRole('button', { name: /add it/i }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.type(screen.getByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+    await user.type(screen.getByLabelText(WHY_QUESTION), 'Because I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByText(/not built yet/i)
 
-    // Later slices' fields cannot hold fake defaults, because they do
-    // not exist in the stored shape at all.
+    // Phase 2C's fields cannot hold fake defaults, because they do not
+    // exist in the stored shape at all. Only the two fields this phase
+    // really implemented are present.
     const stored = readStoredDraft() ?? {}
-    for (const field of ['goal', 'why', 'durationDays', 'milestones', 'dailyEffortMinutes']) {
-      expect(stored, `unexpected “${field}” in the stored draft`).not.toHaveProperty(field)
-    }
+    expect(Object.keys(stored).sort()).toEqual([
+      'currentStep',
+      'customGrowthAreas',
+      'goal',
+      'schemaVersion',
+      'selectedGrowthAreaIds',
+      'startedAt',
+      'updatedAt',
+      'why',
+    ])
   })
 })
 
@@ -580,6 +696,48 @@ describe('surviving refresh, Back and Forward', () => {
       'aria-pressed',
       'true',
     )
+  })
+
+  it('follows the browser Back and Forward buttons, because the URL is the step', async () => {
+    // The in-app Back link is one thing; the browser's chrome is another,
+    // and it is the one a phone user actually reaches for. Every step has
+    // its own URL precisely so these work with no extra code, and this is
+    // the test that would fail if a step were ever rendered as local state
+    // instead of as a route.
+    const user = userEvent.setup()
+    const { router } = renderOnboarding()
+
+    await user.click(screen.getByRole('button', { name: /start my journey/i }))
+    await user.click(await screen.findByRole('button', { name: 'Fitness' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.type(screen.getByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+
+    // Back twice: WHY -> Goal -> Areas.
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })).toBeInTheDocument()
+
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
+
+    // Forward again, in order, and the Goal is still there.
+    await act(async () => {
+      await router.navigate(1)
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })).toBeInTheDocument()
+    expect(screen.getByLabelText(GOAL_QUESTION)).toHaveValue('Run my first 10K')
+
+    await act(async () => {
+      await router.navigate(1)
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })).toBeInTheDocument()
   })
 
   it('survives a cold load of the deep URL for the second step', async () => {
@@ -747,6 +905,46 @@ describe('when storage is unavailable', () => {
       await screen.findByText(/answers are safe while this page is open/i),
     ).toBeInTheDocument()
   })
+
+  it('keeps a typed Goal on screen, and still lets the user move on', async () => {
+    // The exact promise this app makes when storage fails: nothing the
+    // user typed disappears while the page is open. Validation reads the
+    // in-memory draft, so the step is still completable — only the
+    // persistence is missing, and the warning says so.
+    const user = userEvent.setup()
+    renderOnboarding({ repository: noStore(), startAt: '/onboarding/goal' })
+
+    await screen.findByText(/not letting ASCEND save/i)
+
+    const field = screen.getByLabelText(GOAL_QUESTION)
+    await user.type(field, 'Run my first 10K')
+
+    expect(field).toHaveValue('Run my first 10K')
+    expect(screen.getByText(/this browser is not letting ASCEND save/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    // Moving on proves the answer counted, even though it was never stored.
+    expect(await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })).toBeInTheDocument()
+    expect(readStoredDraft()).toBeNull()
+  })
+
+  it('keeps a typed WHY on screen when storage is blocked', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ repository: noStore(), startAt: '/onboarding/why' })
+
+    await screen.findByText(/not letting ASCEND save/i)
+
+    const field = screen.getByLabelText(WHY_QUESTION)
+    await user.type(field, 'Because I want to prove I can')
+
+    expect(field).toHaveValue('Because I want to prove I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    // No Journey, no draft, and an honest note rather than a fake success.
+    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(readStoredDraft()).toBeNull()
+  })
 })
 
 describe('recovering from bad stored data', () => {
@@ -760,7 +958,6 @@ describe('recovering from bad stored data', () => {
 
   it('starts clean on a draft from a version it cannot migrate', async () => {
     renderWithStoredDraft({ schemaVersion: 0, selectedGrowthAreaIds: ['ga_fitness'] })
-
     expect(await screen.findByRole('button', { name: /start my journey/i })).toBeInTheDocument()
   })
 
@@ -781,6 +978,39 @@ describe('recovering from bad stored data', () => {
     expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
     expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
     expect(chip('Piano')).toBeInTheDocument()
+  })
+
+  it('opens the Goal screen on a stored goal that is not text, with an empty box', async () => {
+    // Hand-edited or half-migrated storage. The sentence is gone and
+    // there is nothing honest to show, so the question is simply asked
+    // again rather than the screen crashing or displaying "42".
+    renderWithStoredDraft({ ...sampleStoredDraft(), goal: 42 }, '/onboarding/goal')
+
+    expect(await screen.findByLabelText(GOAL_QUESTION)).toHaveValue('')
+  })
+
+  it('keeps a good Goal when the stored WHY beside it is corrupt', async () => {
+    // The two answers are independent, so damage to one must not take the
+    // other with it. This is the field-at-a-time normalisation, asserted
+    // where a user would notice it.
+    renderWithStoredDraft(
+      { ...sampleStoredDraft(), goal: { text: 'Run my first 10K' }, why: ['nope'] },
+      '/onboarding/why',
+    )
+
+    expect(await screen.findByLabelText(WHY_QUESTION)).toHaveValue('')
+    expect(readStoredDraft()?.goal).toEqual({ text: 'Run my first 10K' })
+  })
+
+  it('reads a Goal stored as a bare string, from a shape this build never wrote', async () => {
+    // Leniency at the storage boundary is what stops an older build's
+    // shape from silently deleting something a person wrote.
+    renderWithStoredDraft(
+      { ...sampleStoredDraft(), goal: '  Run my first 10K  ' },
+      '/onboarding/goal',
+    )
+
+    expect(await screen.findByLabelText(GOAL_QUESTION)).toHaveValue('Run my first 10K')
   })
 
   it('drops a selection that names an area which no longer exists', async () => {
@@ -963,7 +1193,7 @@ describe('continuing', () => {
     expect(screen.getByText(/2 chosen/i)).toBeInTheDocument()
   })
 
-  it('says plainly that the next step is not built, rather than going nowhere', async () => {
+  it('goes on to the Goal question, which now exists', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/areas' })
 
@@ -971,22 +1201,518 @@ describe('continuing', () => {
     await user.click(chip('Fitness'))
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })).toBeInTheDocument()
+    // The pointer moved with the user, and the choices are still stored.
     expect(readStoredDraft()?.currentStep).toBe('goal')
+    expect(storedSelection()).toEqual([suggestedGrowthAreaId('fitness')])
   })
 
-  it('still creates no journey and no real data', async () => {
+  it('still creates no journey and no real data, two steps later', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/areas' })
 
     await screen.findByRole('heading', { level: 1, name: QUESTION })
     await user.click(chip('Fitness'))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.type(screen.getByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+    await user.type(screen.getByLabelText(WHY_QUESTION), 'Because I want to prove I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
     await screen.findByText(/not built yet/i)
 
-    // The draft is the ONLY thing written anywhere. Phase 2A creates no
+    // The draft is the ONLY thing written anywhere. Phase 2B creates no
     // Journey, no Day 1 plan and no points.
     expect(Object.keys(window.localStorage)).toEqual([ASCEND_ONBOARDING_DRAFT_KEY])
+  })
+
+  it('refuses to go on with no Goal, and says what is missing', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    // The wording comes from the domain validator, and focus is taken to
+    // the field that needs fixing rather than only announced.
+    expect(await screen.findByText(/tell us what you would love to achieve/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(GOAL_QUESTION)).toHaveFocus()
+  })
+
+  it('refuses to go on with a Goal that is only whitespace', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.type(screen.getByLabelText(GOAL_QUESTION), '    ')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/tell us what you would love to achieve/i)).toBeInTheDocument()
+    // Nothing was stored, because a field of spaces is not an answer.
+    expect(readStoredDraft()?.goal).toBeUndefined()
+  })
+
+  it('refuses to go on with a Goal that is far too long, without truncating it', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    // Pasted, not typed: pasting a long sentence is how somebody produces
+    // one, and the DOM cap has to apply to a paste too.
+    await user.click(await screen.findByLabelText(GOAL_QUESTION))
+    await user.paste('x'.repeat(MAX_GOAL_LENGTH + 1))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByText(new RegExp(`keep your goal to ${MAX_GOAL_LENGTH} characters or fewer`, 'i')),
+    ).toBeInTheDocument()
+
+    // The sentence they wrote is still exactly what they wrote, so they can
+    // shorten it rather than starting again.
+    expect((readStoredDraft()?.goal as { text: string } | undefined)?.text).toHaveLength(
+      MAX_GOAL_LENGTH + 1,
+    )
+  })
+})
+
+describe('the goal question', () => {
+  it('asks one question and offers one way to answer it', () => {
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: GOAL_QUESTION }),
+    ).toBeInTheDocument()
+    // A textarea, not a text input: a goal is a sentence, and a one-line
+    // box on a phone scrolls a sentence sideways.
+    expect(screen.getByLabelText(GOAL_QUESTION).tagName).toBe('TEXTAREA')
+    expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument()
+  })
+
+  it('offers no templates, no examples to pick and no choices at all', () => {
+    // The place a growth app is most tempted to hand out a menu of goals.
+    // The only thing between the user and the box is an illustrative
+    // placeholder, which is not selectable, not validated and not
+    // suggested.
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    expect(screen.getByPlaceholderText('Run my first 10K')).toBeInTheDocument()
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(screen.getAllByRole('button')).toHaveLength(2)
+  })
+
+  it('uses no game, technical or productivity jargon', () => {
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    for (const pattern of BANNED_WORDS) {
+      expect(document.body.textContent ?? '', pattern.source).not.toMatch(pattern)
+    }
+  })
+
+  it('stores a sentence exactly as written, minus the padding around it', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await user.type(screen.getByLabelText(GOAL_QUESTION), '  Run my first 10K  ')
+
+    expect(readStoredDraft()?.goal).toEqual({ text: 'Run my first 10K' })
+  })
+
+  it('keeps punctuation, emoji and any language exactly as written', async () => {
+    const user = userEvent.setup()
+    const answers = [
+      'Why not?  Really — why not!! (seriously)',
+      'Learn three songs 🎹 and ride a bike 🚴',
+      '跑我的第一個馬拉松',
+      'Освоить три песни, сыграть их наизусть',
+    ]
+
+    for (const answer of answers) {
+      // Each answer gets a genuinely fresh person. Storage outlives the
+      // unmount, so without this the second iteration would load the
+      // first one's answer and append to it.
+      window.localStorage.clear()
+      const view = renderOnboarding({ startAt: '/onboarding/goal' })
+
+      await user.type(screen.getByLabelText(GOAL_QUESTION), answer)
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      // The stored text is byte-identical, and the app moved on rather
+      // than correcting, translating or complaining.
+      expect(readStoredDraft()?.goal, answer).toEqual({ text: answer })
+      await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+      view.unmount()
+    }
+  })
+
+  it('accepts an answer of exactly the maximum length', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await user.click(await screen.findByLabelText(GOAL_QUESTION))
+    await user.paste('x'.repeat(MAX_GOAL_LENGTH))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+  })
+
+  it('saves as the user types, so closing the tab cannot lose a sentence', async () => {
+    // The order of operations is the product promise, not an optimisation.
+    // A refresh before Continue must not lose what was written.
+    const user = userEvent.setup()
+    const first = renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await user.type(screen.getByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    expect(readStoredDraft()?.goal).toEqual({ text: 'Run my first 10K' })
+
+    first.unmount()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    expect(await screen.findByLabelText(GOAL_QUESTION)).toHaveValue('Run my first 10K')
+  })
+
+  it('removes the answer when the user empties the box', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      {
+        ...storedDraftWith('goal', { text: 'Run my first 10K' }),
+      },
+      '/onboarding/goal',
+    )
+
+    await screen.findByLabelText(GOAL_QUESTION)
+    await user.clear(screen.getByLabelText(GOAL_QUESTION))
+
+    expect(readStoredDraft()).not.toHaveProperty('goal')
+  })
+
+  it('goes Back to the Growth Areas with the choices intact', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(storedDraftWith('goal', { text: 'Run my first 10K' }), '/onboarding/goal')
+
+    await screen.findByLabelText(GOAL_QUESTION)
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
+    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
+    // Going Back must not be a way to lose the answer either.
+    expect(readStoredDraft()?.goal).toEqual({ text: 'Run my first 10K' })
+  })
+
+  it('is fully operable with the keyboard alone', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await screen.findByLabelText(GOAL_QUESTION)
+
+    // First stop is the skip link, exactly as on every other screen.
+    await user.tab()
+    expect(screen.getByRole('link', { name: /skip to the question/i })).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByLabelText(GOAL_QUESTION)).toHaveFocus()
+
+    await user.keyboard('Run my first 10K')
+    await user.tab()
+    expect(screen.getByRole('button', { name: /continue/i })).toHaveFocus()
+
+    // Back is reachable too. A text step that can only be left forwards
+    // is a trap for exactly the keyboard users who cannot easily guess
+    // a gesture on a phone.
+    await user.tab()
+    expect(screen.getByRole('button', { name: /^back$/i })).toHaveFocus()
+
+    // Shift-Tab goes back up the same order, which is what makes the
+    // screen usable in both directions without a mouse.
+    await user.tab({ shift: true })
+    expect(screen.getByRole('button', { name: /continue/i })).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+  })
+
+  it('opens with an empty box on a cold deep link, with no draft at all', () => {
+    renderOnboarding({ startAt: '/onboarding/goal' })
+
+    expect(screen.getByLabelText(GOAL_QUESTION)).toHaveValue('')
+    expect(readStoredDraft()).toBeNull()
+  })
+
+  it('opens a real Phase 2A draft, which has no goal field, without complaint', () => {
+    // The shape the previous build wrote, byte for byte. No `goal` key, no
+    // `why` key: an unanswered question must be readable as unanswered, not
+    // as broken.
+    renderWithStoredDraft(
+      {
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
+        currentStep: 'growth-areas',
+        selectedGrowthAreaIds: [suggestedGrowthAreaId('fitness')],
+        customGrowthAreas: [],
+        startedAt: '2026-10-01T09:00:00.000Z',
+        updatedAt: '2026-10-01T09:00:00.000Z',
+      },
+      '/onboarding/goal',
+    )
+
+    expect(screen.getByLabelText(GOAL_QUESTION)).toHaveValue('')
+  })
+})
+
+describe('why it matters to you', () => {
+  it('asks the question and says what the answer is for', () => {
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    expect(screen.getByRole('heading', { level: 1, name: WHY_QUESTION })).toBeInTheDocument()
+    // The supporting copy is the promise, not decoration: this is the one
+    // answer the app will read back on a bad day.
+    expect(
+      screen.getByText(/when things get difficult, we.ll remind you why you started/i),
+    ).toBeInTheDocument()
+  })
+
+  it('uses no game, technical or productivity jargon', () => {
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    for (const pattern of BANNED_WORDS) {
+      expect(document.body.textContent ?? '', pattern.source).not.toMatch(pattern)
+    }
+  })
+
+  it('stores the sentence exactly as written, minus the padding around it', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await user.type(screen.getByLabelText(WHY_QUESTION), '  Because I want to prove I can.  ')
+
+    expect(readStoredDraft()?.why).toEqual({ text: 'Because I want to prove I can.' })
+  })
+
+  it('keeps punctuation, emoji and any language exactly as written', async () => {
+    const user = userEvent.setup()
+    const answers = ['Because I can 🚀', 'My pupils asked why I was sad 🙁', '沉默。Flush。']
+
+    for (const answer of answers) {
+      // Fresh person each time, for the same reason as the Goal test.
+      window.localStorage.clear()
+      const view = renderOnboarding({ startAt: '/onboarding/why' })
+
+      await user.type(await screen.findByLabelText(WHY_QUESTION), answer)
+      expect(readStoredDraft()?.why, answer).toEqual({ text: answer })
+      view.unmount()
+    }
+  })
+
+  it('refuses to go on with nothing written', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await screen.findByLabelText(WHY_QUESTION)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/tell us why this matters to you/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(WHY_QUESTION)).toHaveFocus()
+    // Nothing was ever written, so there is no draft to hold an answer
+    // and nothing for the user to undo.
+    expect(readStoredDraft()?.why).toBeUndefined()
+  })
+
+  it('refuses to go on with whitespace only', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await user.type(await screen.findByLabelText(WHY_QUESTION), '     ')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/tell us why this matters to you/i)).toBeInTheDocument()
+    // A field of spaces is removed, not stored as an answer.
+    expect(readStoredDraft()?.why).toBeUndefined()
+  })
+
+  it('refuses to go on with an answer past the maximum length, without truncating it', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    // Pasted rather than typed, because pasting a long sentence is how
+    // somebody actually produces one, and because the DOM cap is applied
+    // on paste too.
+    await user.click(await screen.findByLabelText(WHY_QUESTION))
+    await user.paste('y'.repeat(MAX_WHY_LENGTH + 1))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByText(new RegExp(`keep it to ${MAX_WHY_LENGTH} characters or fewer`, 'i')),
+    ).toBeInTheDocument()
+    // The whole sentence they wrote is still there to shorten.
+    expect((readStoredDraft()?.why as { text: string } | undefined)?.text).toHaveLength(
+      MAX_WHY_LENGTH + 1,
+    )
+  })
+
+  it('accepts an answer of exactly the maximum length', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await user.click(await screen.findByLabelText(WHY_QUESTION))
+    await user.paste('y'.repeat(MAX_WHY_LENGTH))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+  })
+
+  it('says plainly where the build stops, and offers a way back', async () => {
+    // Phase 2C's duration question does not exist. A Continue button that
+    // quietly goes nowhere, or a success screen for something unbuilt,
+    // would be the most dishonest thing this step could do.
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I want to prove I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^continue$/i })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /change my answer/i }))
+
+    expect(await screen.findByLabelText(WHY_QUESTION)).toHaveValue('Because I want to prove I can')
+  })
+
+  it('keeps the answer after a refresh, and still lets it be changed', async () => {
+    const user = userEvent.setup()
+    const first = renderOnboarding({ startAt: '/onboarding/why' })
+
+    await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I want to prove I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByText(/not built yet/i)
+
+    first.unmount()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    expect(await screen.findByLabelText(WHY_QUESTION)).toHaveValue(
+      'Because I want to prove I can',
+    )
+  })
+
+  it('goes Back to the Goal with the goal intact', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      {
+        ...storedDraftWith('goal', { text: 'Run my first 10K' }),
+        why: { text: 'Because I want to prove I can' },
+      },
+      '/onboarding/why',
+    )
+
+    await screen.findByLabelText(WHY_QUESTION)
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByLabelText(GOAL_QUESTION)).toHaveValue('Run my first 10K')
+    expect(readStoredDraft()?.why).toEqual({ text: 'Because I want to prove I can' })
+  })
+
+  it('is fully operable with the keyboard alone', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await screen.findByLabelText(WHY_QUESTION)
+
+    await user.tab()
+    expect(screen.getByRole('link', { name: /skip to the question/i })).toHaveFocus()
+
+    await user.tab()
+    expect(screen.getByLabelText(WHY_QUESTION)).toHaveFocus()
+
+    await user.keyboard('Because I can')
+    await user.tab()
+    expect(screen.getByRole('button', { name: /continue/i })).toHaveFocus()
+    await user.keyboard('{Enter}')
+    await screen.findByText(/not built yet/i)
+
+    // From the boundary note the way back is still reachable. Two stops,
+    // because Continue was replaced rather than moved: the focused element
+    // is gone, so focus starts over at the top of the document.
+    await user.tab()
+    expect(screen.getByRole('link', { name: /skip to the question/i })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByLabelText(WHY_QUESTION)).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: /change my answer/i })).toHaveFocus()
+  })
+
+  it('never invents a reason on the user’s behalf', async () => {
+    // A WHY that ASCEND made up would be worth nothing on the day somebody
+    // needs to hear it, and the app would have no way to know.
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/why' })
+
+    await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByText(/not built yet/i)
+
+    expect(readStoredDraft()?.why).toEqual({ text: 'Because I can' })
+  })
+})
+
+describe('moving between the two new steps', () => {
+  it('goes Areas to Goal to WHY and back again, losing nothing', async () => {
+    const user = userEvent.setup()
+    renderOnboarding()
+
+    await user.click(screen.getByRole('button', { name: /start my journey/i }))
+    await user.click(await screen.findByRole('button', { name: 'Fitness' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByRole('heading', { level: 1, name: GOAL_QUESTION })
+    await user.type(screen.getByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
+    await user.type(screen.getByLabelText(WHY_QUESTION), 'Because I want to prove I can')
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    // Back to the Goal, still holding both answers.
+    expect(await screen.findByLabelText(GOAL_QUESTION)).toHaveValue('Run my first 10K')
+    expect(readStoredDraft()?.why).toEqual({ text: 'Because I want to prove I can' })
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    // And back to the chips, still selected.
+    expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
+    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps a Goal when every Growth Area it was written alongside is deselected', async () => {
+    // ADR 0009 and 0010 together, and the reason they do not contradict
+    // each other. A goal that belongs to the Journey rather than to one
+    // area cannot be orphaned by a deselection, so there is nothing for
+    // the Summary to have to resolve later — and nothing is lost now.
+    const user = userEvent.setup()
+    const view = renderOnboarding({ startAt: '/onboarding/goal' })
+
+    await user.type(await view.findByLabelText(GOAL_QUESTION), 'Run my first 10K')
+    view.unmount()
+
+    // The state that deselection leaves behind: no areas at all, but a
+    // Goal still stored. Hand-written because getting there through the
+    // UI is impossible — Continue is correctly disabled with nothing
+    // chosen — which is exactly why the storage layer has to be tested
+    // directly.
+    renderWithStoredDraft(
+      {
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
+        currentStep: 'growth-areas',
+        selectedGrowthAreaIds: [],
+        customGrowthAreas: [],
+        goal: { text: 'Run my first 10K' },
+        startedAt: '2026-10-01T09:00:00.000Z',
+        updatedAt: '2026-10-01T09:00:00.000Z',
+      },
+      '/onboarding/goal',
+    )
+
+    expect(await screen.findByLabelText(GOAL_QUESTION)).toHaveValue('Run my first 10K')
+    expect(storedSelection()).toEqual([])
   })
 })
 

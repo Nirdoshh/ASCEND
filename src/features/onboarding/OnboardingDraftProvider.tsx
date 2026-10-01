@@ -17,6 +17,8 @@ import {
   createOnboardingDraft,
   knownGrowthAreas,
   reconcileSelections,
+  setGoal as setGoalIn,
+  setWhy as setWhyIn,
   toggleGrowthArea as toggleGrowthAreaIn,
 } from '../../domain/onboardingDraft'
 import type { OnboardingDraft, OnboardingStep } from '../../domain/onboardingDraft'
@@ -41,6 +43,24 @@ export interface OnboardingContextValue {
   begin(): void
   toggleArea(id: string): void
   createCustomArea(raw: string): NewGrowthAreaResult
+  /**
+   * Records the Goal, on every keystroke rather than on Continue.
+   *
+   * The order is the product promise, not an optimisation. If this were
+   * called when Continue was pressed, a person who typed an answer and
+   * closed the tab would lose it — and "if the user answered something and
+   * we lose it, that is the single most annoying thing this app could do"
+   * is the rule the whole file is written around.
+   *
+   * It costs one localStorage write per keystroke, which is a few hundred
+   * bytes. The draft is small, writes are synchronous but trivial at this
+   * size, and `setGoal` returns the identical draft when the trimmed text
+   * has not changed, so a keystroke that only moves a trailing space costs
+   * nothing at all.
+   */
+  setGoal(raw: string): void
+  /** The WHY. Same reasoning, same rules, same cost. */
+  setWhy(raw: string): void
   advanceFrom(step: OnboardingStep): void
 }
 
@@ -104,19 +124,25 @@ export function OnboardingDraftProvider({
     [repository],
   )
 
-  const begin = useCallback(() => {
-    setDraft((current) => {
-      // Never discard an existing draft: someone who refreshes, or
-      // navigates back to the welcome screen, keeps their answers.
-      if (current) return current
-
-      const created = startDraft()
-      setStorageStatus(repository.save(created) === 'ok' ? 'ok' : 'unavailable')
-      return created
-    })
-  }, [repository])
-
   const now = useCallback(() => new Date().toISOString(), [])
+
+  const begin = useCallback(() => {
+    // Marks the welcome step as done, which both creates the draft and
+    // moves it off the screen the user has just read.
+    //
+    // The currentStep test is the whole point. `apply` has already
+    // substituted a fresh draft for a missing one, so "is there a draft
+    // yet" cannot be asked inside `change` — the answer is always yes.
+    // Asking "has the welcome step been completed" can be asked, and is
+    // the question that actually matters: it means pressing Start after
+    // coming Back from the WHY does NOT rewind somebody's progress.
+    //
+    // It also repairs the stale pointer carried by every draft written in
+    // Phase 2A, whose `begin()` created a draft still saying `welcome`.
+    apply((current) =>
+      current.currentStep === 'welcome' ? completeStep(current, 'welcome', now()) : current,
+    )
+  }, [apply, now])
 
   const toggleArea = useCallback(
     (id: string) => {
@@ -146,6 +172,20 @@ export function OnboardingDraftProvider({
     [apply, draft, now],
   )
 
+  const setGoal = useCallback(
+    (raw: string) => {
+      apply((current) => setGoalIn(current, raw, now()))
+    },
+    [apply, now],
+  )
+
+  const setWhy = useCallback(
+    (raw: string) => {
+      apply((current) => setWhyIn(current, raw, now()))
+    },
+    [apply, now],
+  )
+
   const advanceFrom = useCallback(
     (step: OnboardingStep) => {
       apply((current) => completeStep(current, step, now()))
@@ -170,9 +210,11 @@ export function OnboardingDraftProvider({
       begin,
       toggleArea,
       createCustomArea,
+      setGoal,
+      setWhy,
       advanceFrom,
     }
-  }, [draft, storageStatus, begin, toggleArea, createCustomArea, advanceFrom])
+  }, [draft, storageStatus, begin, toggleArea, createCustomArea, setGoal, setWhy, advanceFrom])
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>
 }

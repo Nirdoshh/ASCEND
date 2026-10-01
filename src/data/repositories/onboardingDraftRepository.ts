@@ -28,6 +28,7 @@ import {
   suggestedGrowthAreaId,
 } from '../../domain/growthAreaId'
 import { normalizeGrowthAreaName, toGrowthAreaDisplayName } from '../../domain/growthAreaName'
+import { normalizePersonalAnswer } from '../../domain/personalAnswer'
 import {
   normalizeDraftGrowthArea,
   ONBOARDING_SCHEMA_VERSION,
@@ -374,12 +375,18 @@ function readSchemaVersion(value: object): number {
  * ones. The order matters at the end: custom areas are repaired FIRST,
  * because reconciliation can only recognise a selection once it knows
  * which areas exist.
+ *
+ * A draft written by an earlier build simply has no `goal` or `why` key,
+ * which is the correct output here and is why adding them needed no schema
+ * migration. See the note on ONBOARDING_SCHEMA_VERSION.
  */
 function normalizeFields(value: object, now: string): OnboardingDraft {
   const candidate = value as Record<string, unknown>
 
   const currentStep = normalizeStep(candidate.currentStep)
   const customGrowthAreas = normalizeCustomAreas(candidate.customGrowthAreas)
+  const goal = normalizePersonalAnswer(candidate.goal)
+  const why = normalizePersonalAnswer(candidate.why)
 
   const draft: OnboardingDraft = {
     schemaVersion: ONBOARDING_SCHEMA_VERSION,
@@ -388,6 +395,12 @@ function normalizeFields(value: object, now: string): OnboardingDraft {
     customGrowthAreas,
     startedAt: normalizeTimestamp(candidate.startedAt, now),
     updatedAt: normalizeTimestamp(candidate.updatedAt, now),
+    // Spread conditionally rather than `goal: goal ?? undefined`. A key
+    // that is present and undefined is not the same thing as a key that is
+    // absent, and "the user has not answered this yet" has exactly one
+    // representation in this codebase.
+    ...(goal ? { goal } : {}),
+    ...(why ? { why } : {}),
   }
 
   // Drop selections pointing at areas that no longer exist. Without

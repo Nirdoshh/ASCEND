@@ -18,6 +18,8 @@ import {
   renameCustomGrowthArea,
   resumeStep,
   selectGrowthArea,
+  setGoal,
+  setWhy,
   toggleGrowthArea,
   type DraftGrowthArea,
   type OnboardingDraft,
@@ -425,6 +427,138 @@ describe('steps', () => {
 
     expect(draft.currentStep).toBe('welcome')
     expect(draft.updatedAt).toBe(T0)
+  })
+})
+
+describe('recording the goal and the why', () => {
+  it('stores a sentence, trimmed at the ends only', () => {
+    const draft = setGoal(createOnboardingDraft(T0), '  Run my first 10K  ', T1)
+
+    expect(draft.goal).toEqual({ text: 'Run my first 10K' })
+    expect(draft.updatedAt).toBe(T1)
+    expect(draft.startedAt).toBe(T0)
+  })
+
+  it('REMOVES the field when the box is emptied, instead of storing a blank', () => {
+    // `goal: ''` would claim the user answered with nothing, which is a
+    // different and false statement from "not asked yet".
+    const withAnswer = setGoal(createOnboardingDraft(T0), 'Run my first 10K', T1)
+    const cleared = setGoal(withAnswer, '', T2)
+
+    expect('goal' in cleared).toBe(false)
+    expect(cleared).not.toHaveProperty('goal')
+    expect(cleared.updatedAt).toBe(T2)
+  })
+
+  it('removes the field when the box holds only whitespace', () => {
+    const withAnswer = setGoal(createOnboardingDraft(T0), 'Run my first 10K', T1)
+    const cleared = setGoal(withAnswer, '   \n  ', T2)
+
+    expect(cleared).not.toHaveProperty('goal')
+  })
+
+  it('leaves the draft untouched when a blank replaces a blank', () => {
+    // Identity matters: OnboardingDraftProvider uses it to skip a storage
+    // write, so returning a fresh object here would rewrite localStorage
+    // on every keystroke that changes nothing.
+    const draft = createOnboardingDraft(T0)
+
+    expect(setGoal(draft, '', T1)).toBe(draft)
+  })
+
+  it('leaves the draft untouched when the trimmed text has not changed', () => {
+    // The user pressed space then backspace, or typed inside a run of
+    // spaces. Nothing they can see changed, so nothing is written.
+    const draft = setGoal(createOnboardingDraft(T0), 'Run my first 10K', T1)
+
+    expect(setGoal(draft, '  Run my first 10K  ', T2)).toBe(draft)
+  })
+
+  it('does change the draft when internal spacing changes', () => {
+    // The opposite of the case above, and the reason the identity check
+    // is on the TRIMMED text rather than the raw one.
+    const draft = setGoal(createOnboardingDraft(T0), 'Run.  Walk.', T1)
+
+    expect(setGoal(draft, 'Run. Walk.', T2)).not.toBe(draft)
+  })
+
+  it('never writes a blank answer, whatever it is given', () => {
+    // One property, three inputs. If a future edit reintroduced an empty
+    // branch, this is what catches it.
+    for (const blank of ['', ' ', '\n\n', ' \t \n ']) {
+      const draft = setGoal(createOnboardingDraft(T0), blank, T1)
+      expect('goal' in draft, JSON.stringify(blank)).toBe(false)
+    }
+  })
+
+  it('stores the why with exactly the same rules', () => {
+    const draft = setWhy(createOnboardingDraft(T0), '  Because I can.  ', T1)
+
+    expect(draft.why).toEqual({ text: 'Because I can.' })
+
+    // Same trimming, same "identical text is not a change", same removal
+    // rather than blanking.
+    expect(setWhy(draft, ' Because I can. ', T2)).toBe(draft)
+    expect(setWhy(draft, '   ', T2)).not.toHaveProperty('why')
+  })
+
+  it('keeps the two answers completely independent', () => {
+    let draft = setGoal(createOnboardingDraft(T0), 'Run my first 10K', T1)
+    draft = setWhy(draft, 'Because I want to prove I can', T2)
+
+    expect(draft.goal).toEqual({ text: 'Run my first 10K' })
+    expect(draft.why).toEqual({ text: 'Because I want to prove I can' })
+
+    // Clearing one must not touch the other. They answer different
+    // questions, and a user rewriting their Goal has not changed their
+    // reason for starting.
+    const goalCleared = setGoal(draft, '', T2)
+    expect(goalCleared).not.toHaveProperty('goal')
+    expect(goalCleared.why).toEqual({ text: 'Because I want to prove I can' })
+
+    const whyCleared = setWhy(draft, '  ', T2)
+    expect(whyCleared.goal).toEqual({ text: 'Run my first 10K' })
+    expect(whyCleared).not.toHaveProperty('why')
+  })
+
+  it('touches nothing else in the draft', () => {
+    const base = selectGrowthArea(
+      addCustomGrowthArea(createOnboardingDraft(T0), PIANO, T0),
+      FITNESS.id,
+      T0,
+    )
+    const withAnswer = setGoal(base, 'Run my first 10K', T1)
+
+    expect(withAnswer.selectedGrowthAreaIds).toEqual(base.selectedGrowthAreaIds)
+    expect(withAnswer.customGrowthAreas).toEqual(base.customGrowthAreas)
+    expect(withAnswer.schemaVersion).toBe(base.schemaVersion)
+    expect(withAnswer.currentStep).toBe(base.currentStep)
+    expect(withAnswer.startedAt).toBe(base.startedAt)
+    // Purely additive: nothing in the Phase 2A shape is rewritten, and
+    // every answer set above is still readable.
+    expect(withAnswer).toEqual({
+      ...base,
+      goal: { text: 'Run my first 10K' },
+      updatedAt: T1,
+    })
+  })
+
+  it('survives a Growth Area being deselected, because it names no area', () => {
+    // ADR 0010. The Goal is a Journey-level answer, so there is no
+    // reference for a deselection to break — which is why deselecting
+    // cannot destroy it and why `reconcileSelections` needs no knowledge
+    // of it at all.
+    const withAnswer = setGoal(selectGrowthArea(createOnboardingDraft(T0), FITNESS.id, T0), 'Run my first 10K', T1)
+    const deselected = reconcileSelections(toggleGrowthArea(withAnswer, FITNESS.id, T2))
+
+    expect(deselected.selectedGrowthAreaIds).toEqual([])
+    expect(deselected.goal).toEqual({ text: 'Run my first 10K' })
+  })
+
+  it('does not change the step, which is navigation and nothing else', () => {
+    const draft = setGoal(createOnboardingDraft(T0), 'Run my first 10K', T1)
+
+    expect(draft.currentStep).toBe('welcome')
   })
 })
 

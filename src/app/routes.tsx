@@ -2,9 +2,11 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import { AppShell } from './AppShell'
 import { DesignSystemScreen } from '../features/designsystem/DesignSystemScreen'
+import { GoalScreen } from '../features/onboarding/GoalScreen'
 import { GrowthAreasScreen } from '../features/onboarding/GrowthAreasScreen'
 import { OnboardingLayout } from '../features/onboarding/OnboardingLayout'
 import { WelcomeScreen } from '../features/onboarding/WelcomeScreen'
+import { WhyScreen } from '../features/onboarding/WhyScreen'
 import { JourneyScreen } from '../features/journey/JourneyScreen'
 import { ProgressScreen } from '../features/progress/ProgressScreen'
 import { TodayScreen } from '../features/today/TodayScreen'
@@ -67,6 +69,11 @@ export const router = createBrowserRouter([
    * Each onboarding step is its own URL. That is what makes the browser
    * back button, forward button and refresh work with no extra code:
    * the URL is the step.
+   *
+   * These paths are mirrored in features/onboarding/resume.ts, which owns
+   * the step-to-URL table a returning visitor is sent through. The route
+   * smoke test in routes.test.tsx cold-loads every one of them, so the two
+   * cannot drift apart without a test failing.
    */
   {
     path: '/onboarding',
@@ -74,6 +81,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <WelcomeScreen /> },
       { path: 'areas', element: <GrowthAreasScreen /> },
+      { path: 'goal', element: <GoalScreen /> },
+      { path: 'why', element: <WhyScreen /> },
     ],
   },
 ])

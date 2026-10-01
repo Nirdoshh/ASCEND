@@ -48,6 +48,11 @@ describe('routes', () => {
      */
     { path: '/onboarding', heading: 'Become the person you want to be.' },
     { path: '/onboarding/areas', heading: 'What do you want to improve?' },
+    // The two Phase 2B URLs. A cold load of either must render the
+    // question, because somebody can bookmark, refresh or share them —
+    // and a route that only works when reached by clicking is not a route.
+    { path: '/onboarding/goal', heading: 'What would you love to achieve?' },
+    { path: '/onboarding/why', heading: 'Why does this matter to you?' },
   ] as const
 
   for (const { path, heading } of cases) {

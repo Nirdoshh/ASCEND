@@ -51,15 +51,6 @@
   font-size: var(--text-sm);
 }
 
-.areas__saved {
-  margin: 0;
-  padding: var(--space-4);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background-color: var(--surface-sunken);
-  color: var(--text-primary);
-}
-
 .areas__count {
   margin: 0;
   text-align: center;

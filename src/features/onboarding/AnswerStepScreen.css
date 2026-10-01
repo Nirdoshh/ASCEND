@@ -1,0 +1,39 @@
+/*
+ * A free-text onboarding step.
+ *
+ * Almost nothing here, and that is the point. The screen is a question,
+ * a box, and two buttons; the only layout it needs is enough room for the
+ * box to breathe and for the actions to stay in thumb reach. Every colour,
+ * space and radius comes from tokens.css.
+ *
+ * The label is repeated as the field's own <label> rather than reusing
+ * the <h1>. The heading and the control have different jobs — one orients,
+ * the other names the input — and a screen-reader user tabbing to an empty
+ * box needs the second one. It is the same sentence, so it reads as one
+ * question rather than two.
+ */
+
+.answer-step {
+  display: flex;
+  flex-direction: column;
+}
+
+.answer-step__field {
+  margin-block-start: var(--space-6);
+}
+
+/*
+ * The "the next step is not built yet" note. Same surface treatment as
+ * the saved-answers box in Phase 2A: a quiet sunken panel, not a red
+ * banner. Nothing has gone wrong — the app is working, it just stops
+ * here — and dressing it as an error would punish the user for our
+ * schedule.
+ */
+.answer-step__boundary {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background-color: var(--surface-sunken);
+  color: var(--text-primary);
+}

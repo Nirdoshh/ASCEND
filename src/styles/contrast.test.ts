@@ -109,6 +109,7 @@ const TEXT_PAIRS: Array<[scope: 'light' | 'dark', foreground: string, background
   ['light', 'color-warning', 'surface-raised'],
   ['light', 'color-warning', 'color-warning-subtle'],
   ['light', 'color-danger', 'surface-raised'],
+  ['light', 'color-danger', 'surface-page'],
   ['light', 'color-danger', 'color-danger-subtle'],
 
   ['dark', 'text-primary', 'surface-page'],
@@ -128,6 +129,7 @@ const TEXT_PAIRS: Array<[scope: 'light' | 'dark', foreground: string, background
   ['dark', 'color-warning', 'surface-raised'],
   ['dark', 'color-warning', 'color-warning-subtle'],
   ['dark', 'color-danger', 'surface-raised'],
+  ['dark', 'color-danger', 'surface-page'],
   ['dark', 'color-danger', 'color-danger-subtle'],
 ]
 

@@ -9,17 +9,20 @@ more meaningful action in real life.
 
 ## Status
 
-Phase 1 complete: application shell + design system.
+Phase 2B complete: onboarding asks for Growth Areas, a Goal and a WHY.
 
-Not yet built: onboarding, Today's plan, completion, scoring, Journey, milestones,
-Progress, Daily Review, Recovery. The four screens exist with honest empty states
-rather than fake data.
+Not yet built: the duration, milestone, daily-effort and summary steps, Today's
+plan, completion, scoring, Journey, Progress, Daily Review, Recovery. The four
+main screens exist with honest empty states rather than fake data, and onboarding
+stops and says so plainly rather than pretending the plan is finished.
 
 | Phase | Scope | State |
 |---|---|---|
 | 0 | Architecture and product proposal | Done |
 | 1 | Shell, design system, responsive, a11y base, Cloudflare plumbing | **Done** |
-| 2 | Onboarding | Not started |
+| 2A | Onboarding: welcome + Growth Areas | **Done** |
+| 2B | Onboarding: Goal + WHY | **Done** |
+| 2C | Onboarding: duration, milestones, daily effort, summary, Journey creation | Not started |
 | 3 | Today system | Not started |
 
 ## Requirements
@@ -131,7 +134,8 @@ docs/adr/                0001 Cloudflare Worker, 0002 repository interfaces,
                          0006 toolchain versions (TS 6 / ESLint 9),
                          0007 opaque Growth Area ids, in three namespaces,
                          0008 currentStep is navigation only,
-                         0009 unresolved references are kept, not deleted
+                         0009 unresolved references are kept, not deleted,
+                         0010 the Goal and the WHY are Journey-level
 ```
 
 ## Design system

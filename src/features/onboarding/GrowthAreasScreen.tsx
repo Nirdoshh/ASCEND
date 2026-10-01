@@ -45,7 +45,6 @@ export function GrowthAreasScreen() {
   const [name, setName] = useState('')
   const [problem, setProblem] = useState<string | undefined>(undefined)
   const [justAdded, setJustAdded] = useState<string | null>(null)
-  const [stepSaved, setStepSaved] = useState(false)
 
   const suggested = areas.filter((area) => area.kind === 'suggested')
   const custom = areas.filter((area) => area.kind === 'custom')
@@ -89,7 +88,10 @@ export function GrowthAreasScreen() {
 
   const onContinue = () => {
     advanceFrom('growth-areas')
-    setStepSaved(true)
+    // React Router 7 types navigate() as possibly returning a promise.
+    // There is nothing to await here, so `void` states that rather than
+    // silencing a real check.
+    void navigate('/onboarding/goal')
   }
 
   return (
@@ -187,45 +189,26 @@ export function GrowthAreasScreen() {
       </section>
 
       <div className="onboarding__actions">
-        {stepSaved ? (
-          <>
-            {/*
-              Honest about the boundary of this build. Step 3 does not
-              exist yet, and pretending otherwise — a Continue button
-              that goes nowhere, or a success screen for something that
-              has not been built — is worse than saying so plainly.
-            */}
-            <p className="areas__saved" role="status">
-              Your choices are saved. The next question is your Goal, and that part is not built yet.
-            </p>
-            <Button variant="secondary" fullWidth onClick={() => setStepSaved(false)}>
-              Change my answers
-            </Button>
-          </>
+        <Button variant="primary" size="lg" fullWidth disabled={!canContinue} onClick={onContinue}>
+          Continue
+        </Button>
+
+        {canContinue ? (
+          <p className="areas__count text-sm text-muted">
+            {chosenCount === 1
+              ? '1 chosen. Pick more, or continue.'
+              : `${chosenCount} chosen. Pick more, or continue.`}
+          </p>
         ) : (
-          <>
-            <Button variant="primary" size="lg" fullWidth disabled={!canContinue} onClick={onContinue}>
-              Continue
-            </Button>
-
-            {canContinue ? (
-              <p className="areas__count text-sm text-muted">
-                {chosenCount === 1
-                  ? '1 chosen. Pick more, or continue.'
-                  : `${chosenCount} chosen. Pick more, or continue.`}
-              </p>
-            ) : (
-              // The message comes from the validator, so the reason the
-              // button is disabled is stated in exactly one place and can
-              // never drift from the rule.
-              <p className="areas__count text-sm text-muted">{step.message}</p>
-            )}
-
-            <Button variant="quiet" onClick={() => void navigate('/onboarding')}>
-              Back
-            </Button>
-          </>
+          // The message comes from the validator, so the reason the
+          // button is disabled is stated in exactly one place and can
+          // never drift from the rule.
+          <p className="areas__count text-sm text-muted">{step.message}</p>
         )}
+
+        <Button variant="quiet" onClick={() => void navigate('/onboarding')}>
+          Back
+        </Button>
       </div>
     </>
   )

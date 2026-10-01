@@ -5,9 +5,17 @@
 
 ## Context
 
-From Phase 2B onward, the draft holds answers that are keyed **by Growth Area
-id**: a Goal, a WHY, a set of milestones, a daily effort figure. The ids are
-opaque and permanent (ADR 0007).
+From Phase 2B onward, the draft holds answers a user gives after choosing their
+Growth Areas: a Goal, a WHY, a set of milestones, a daily effort figure. The ids
+are opaque and permanent (ADR 0007).
+
+> **Corrected by ADR 0010.** This ADR was written assuming those answers would be
+> **keyed by Growth Area id**, and the reasoning below follows that assumption.
+> Phase 2B built the Goal and the WHY as **Journey-level** fields with no area
+> reference at all, so they cannot be orphaned. ADR 0010 records that and
+> narrows this ADR's scope to answers that genuinely do reference an area —
+> milestones and daily effort, if those turn out to be per-area. The rule below
+> is unchanged; only the set of fields it applies to is smaller than expected.
 
 That creates a new situation. A user can go back to step 2 and deselect an area
 they had already written a Goal for. The area is not deleted — deselecting only
@@ -84,20 +92,27 @@ on their behalf.
 
 ## Not built yet, deliberately
 
-There is nothing to implement in Phase 2A. The draft type has no `goal`, no
+Phase 2A had nothing to implement here. The draft type then had no `goal`, no
 `why`, no `milestones` and no `dailyEffortMinutes` field at all — an unanswered
-question cannot be stored as `""` because there is nowhere to put it. Inventing
-an empty resolution state now would be structure with no content.
+question could not be stored as `""` because there was nowhere to put it.
+Inventing an empty resolution state would have been structure with no content.
 
 What is locked in here is the **shape of the decision**, and two supporting
-properties are already enforced by tests:
+properties:
 
-1. Later answers are keyed by area id, so an id reference is the only thing that
-   can be orphaned.
+1. An answer that references an area does so by **opaque id**, so an id
+   reference is the only thing that can be orphaned.
 2. `reconcileSelections` deliberately does **not** touch dependent data. It
    reconciles the *selection list* against areas that exist at all, and nothing
    else. Extending it to dependent fields when those fields arrive would
    reintroduce exactly this bug.
+
+**Phase 2B update.** The Goal and the WHY arrived in Phase 2B and are *not*
+keyed by area id — they belong to the Journey. See ADR 0010. So there is still
+nothing to reconcile for them: property 2 remains satisfied precisely because
+`reconcileSelections` was not extended, and a goal survives deselecting every
+selected area. The rule in this ADR will apply in full to milestones and daily
+effort if those turn out to be per-area.
 
 ## Related
 
@@ -105,3 +120,4 @@ properties are already enforced by tests:
 - `src/domain/onboardingValidation.ts` — `unresolvable` as distinct from `unanswered`
 - ADR 0007 — Growth Area identity is opaque
 - ADR 0008 — `currentStep` is navigation only
+- ADR 0010 — the Goal and the WHY are Journey-level answers, which narrows this ADR's scope

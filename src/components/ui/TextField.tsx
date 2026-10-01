@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, ReactNode, Ref, TextareaHTMLAttributes } from 'react'
 
 import { cn } from '../../lib/cn'
 import './TextField.css'
@@ -18,7 +18,20 @@ export interface TextFieldProps
 
 export interface TextAreaFieldProps
   extends BaseTextFieldProps,
-    Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'aria-describedby' | 'id'> {}
+    Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'aria-describedby' | 'id'> {
+  /**
+   * Exposed so a form can move focus to the field it is complaining
+   * about. `TextareaHTMLAttributes` does not carry `ref` (that lives in
+   * ClassAttributes), so it has to be declared — and because this is React
+   * 19 it needs no `forwardRef` wrapper: `ref` arrives as an ordinary
+   * prop and `{...rest}` passes it to the <textarea>.
+   *
+   * Declared on the textarea only. Nothing in ASCEND needs to focus a
+   * single-line input, and an unused prop is a prop somebody will
+   * eventually use for the wrong thing.
+   */
+  ref?: Ref<HTMLTextAreaElement>
+}
 
 const describedBy = (id: string, hint: ReactNode, error?: string): string | undefined => {
   const ids = [error ? `${id}-error` : null, hint ? `${id}-hint` : null].filter(Boolean)

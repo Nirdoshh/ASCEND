@@ -7,15 +7,23 @@
  * that is the single most annoying thing this app could do. So the rules
  * below all point the same way.
  *
- * WHY goal / why / duration / milestones / dailyEffortMinutes ARE ABSENT
+ * WHY duration / milestones / dailyEffortMinutes ARE ABSENT
  *
- * Those fields belong to Phases 2B–2C. They are deliberately not in the
- * type yet. An optional `goal?: string` invites `goal: ''`, and an empty
- * string is a lie: it means "answered, and the answer is blank", which is
- * different from "not asked yet". By leaving the fields out entirely, an
- * unanswered question cannot be represented, so no screen can invent a
- * default. They are added in their own slice, when there is a real answer
- * to store.
+ * Those fields belong to Phase 2C. They are deliberately not in the type
+ * yet, and the reason is the same one that shaped `goal` and `why`: an
+ * optional `milestones?: []` invites an empty list, and an empty list
+ * means "answered, and the answer is nothing". A question that has not
+ * been asked must not be able to look like a question that was answered
+ * badly. They are added when there is a real answer to store.
+ *
+ * WHY goal AND why ARE OPTIONAL, NOT BLANK
+ *
+ * `goal?: { text: string }` rather than `goal: { text: '' }`. The field is
+ * in the type from Phase 2B, but `createOnboardingDraft` does not set it,
+ * and `toPersonalAnswer` in personalAnswer.ts is the only thing that can
+ * create one. So an unanswered question is ABSENT, which is the truth, and
+ * no screen can invent a default. A test asserts a fresh draft holds
+ * neither field, even though the type has room for both.
  *
  * WHY EVERYTHING REFERENCES AN ID
  *
@@ -34,9 +42,11 @@
  * This split is the whole "never silently destroy later work" guarantee.
  * Toggling off an area cannot delete the area itself, and it cannot
  * touch any other field of the draft, because the toggle functions below
- * are pure projections over exactly one key. Phase 2B's Goal is recorded
- * *against* an area id too, so deselecting in step 2 leaves a Goal
- * written in step 3 untouched and available if the user comes back.
+ * are pure projections over exactly one key.
+ *
+ * The Goal and the WHY are deliberately OUTSIDE this split. They are one
+ * answer each, for the Journey as a whole, and Phase 2C's milestones are
+ * where per-area data begins. See ADR 0010.
  *
  * WHAT HAPPENS WHEN A LATER ANSWER IS ORPHANED
  *
@@ -47,31 +57,54 @@
  *   restore the Growth Area · assign another one · edit the dependent item
  *   · intentionally remove it
  *
- * Nothing is ever deleted to tidy this up. An orphaned Goal is a sentence
- * somebody typed; silently dropping it because a chip was deselected is
- * exactly the "never punish the user" failure the product rules forbid.
+ * Nothing is ever deleted to tidy this up. An orphaned milestone is a
+ * sentence somebody typed; silently dropping it because a chip was
+ * deselected is exactly the "never punish the user" failure the product
+ * rules forbid.
  *
- * The mechanism is deliberately not built yet, because there is no later data
- * to orphan — `goal` and everything after it are absent from the type on
- * purpose (see above), and inventing an empty resolution state now would be
- * structure with no content. What is locked in here is the shape of the
- * decision: answers are keyed by area id, so an id reference is the only thing
- * that can be orphaned, and `reconcileSelections` below is deliberately NOT
- * extended to touch dependent data when that data arrives.
+ * `goal` and `why` CANNOT be orphaned, and that is a design decision
+ * rather than luck: they are not keyed by an area id at all, because they
+ * describe the Journey as a whole. A Journey spans every Growth Area the
+ * user picked, so there is no single area for them to point at and nothing
+ * for a deselection to break. ADR 0010 records why. The rule above still
+ * binds everything from `milestones` onwards, which genuinely are
+ * per-area, and `reconcileSelections` below is deliberately NOT extended
+ * to touch dependent data when that data arrives.
  */
 
 import { MAX_GROWTH_AREA_NAME_LENGTH, mergeGrowthAreas } from './growthAreas'
 import { migratedGrowthAreaId } from './growthAreaId'
 import { normalizeGrowthAreaName, toGrowthAreaDisplayName } from './growthAreaName'
+import { toPersonalAnswer } from './personalAnswer'
+import type { PersonalAnswer } from './personalAnswer'
 import type { GrowthArea } from './growthAreas'
 
 /**
- * Bumped when the stored shape changes. See onboardingDraftRepository.ts
- * for the migrations that carry older drafts forward.
+ * Bumped when a stored draft in the OLD format cannot be read correctly by
+ * the new build. See onboardingDraftRepository.ts for the migrations that
+ * carry older drafts forward.
  *
  *   1  Phase 2A.  Ids WERE normalized names.
  *   2  Ids became opaque, but shared one `ga_` prefix.
  *   3  Ids gained explicit per-origin namespaces: ga_s_ / ga_c_ / ga_m_.
+ *
+ * WHY ADDING goal AND why DID NOT MAKE IT 4
+ *
+ * Two reasons, and the second is the one that decided it.
+ *
+ * The number exists to force a REWRITE, not to count releases. Bumping it
+ * would run every existing draft through a migration with nothing to do —
+ * there is no old shape to convert, because an absent optional field is
+ * exactly what a draft from the previous build already holds, and
+ * `normalizeFields` produces it for free.
+ *
+ * More importantly, `migrateAndNormalizeDraft` treats a HIGHER stored
+ * version as "this build is older than the data" and keeps only the fields
+ * it understands. So a v4 written by this build, read by the v3 build still
+ * in someone's browser cache, would drop the Goal on the next write. Not
+ * bumping means that older build loads it as an ordinary v3 draft and
+ * ignores a key it has no name for — the same visible outcome, without a
+ * version number falsely claiming the two formats are incompatible.
  */
 export const ONBOARDING_SCHEMA_VERSION = 3
 
@@ -127,6 +160,22 @@ export interface OnboardingDraft {
   readonly selectedGrowthAreaIds: readonly string[]
   /** Every custom area the user has created, chosen or not. */
   readonly customGrowthAreas: readonly DraftGrowthArea[]
+  /**
+   * What the user would love to achieve, in their own words.
+   *
+   * ABSENT until they have actually written something, and never
+   * `{ text: '' }` — see personalAnswer.ts. One answer for the whole
+   * Journey rather than one per Growth Area, because a Journey spans all
+   * of them. See ADR 0010.
+   */
+  readonly goal?: PersonalAnswer
+  /**
+   * Why this matters to them. First-class data, not decoration: Recovery,
+   * reflection and milestone moments will read it back.
+   *
+   * Same absence rule as `goal`, and the same Journey-level scope.
+   */
+  readonly why?: PersonalAnswer
   readonly startedAt: string
   readonly updatedAt: string
 }
@@ -323,6 +372,67 @@ export function renameCustomGrowthArea(
   }
 }
 
+/** The two free-text answers the draft holds. */
+type AnswerField = 'goal' | 'why'
+
+/**
+ * Records what the user would love to achieve.
+ *
+ * Every property below has a test, because each one is a way to lose a
+ * sentence somebody wrote:
+ *
+ *   1. Blank removes the field rather than storing `''`. An absent answer
+ *      and an empty one are different, and only the first is true.
+ *   2. The stored text is trimmed at both ends and nothing else. Internal
+ *      spacing, line breaks, punctuation, capitalisation and emoji are the
+ *      user's, and are not ours to tidy.
+ *   3. Identical text is not a change — the same object comes back — so
+ *      re-saving an untouched answer does not rewrite storage.
+ *   4. It touches nothing else in the draft. Growth Areas, the WHY and the
+ *      timestamps' callers are unaffected except `updatedAt`.
+ *
+ * `why` is set by `setWhy`, which is the same function with a different
+ * field name. One implementation, so the two steps cannot drift apart in
+ * how they treat an empty box.
+ */
+export function setGoal(draft: OnboardingDraft, raw: string, now: string): OnboardingDraft {
+  return setAnswer(draft, 'goal', raw, now)
+}
+
+/** Records why this matters to them. Identical rules to `setGoal`. */
+export function setWhy(draft: OnboardingDraft, raw: string, now: string): OnboardingDraft {
+  return setAnswer(draft, 'why', raw, now)
+}
+
+function setAnswer(
+  draft: OnboardingDraft,
+  field: AnswerField,
+  raw: string,
+  now: string,
+): OnboardingDraft {
+  const answer = toPersonalAnswer(raw)
+
+  // Same object back for the same text, so OnboardingDraftProvider can use
+  // identity to skip a storage write. Without this every keystroke that
+  // changes nothing visible would still hit localStorage.
+  if ((answer?.text ?? undefined) === draft[field]?.text) return draft
+
+  if (!answer) {
+    // The key is DELETED, not set to undefined. `goal: undefined` still
+    // shows up in `Object.keys` and in a naive JSON round-trip, and
+    // "the field exists but is empty" is the exact ambiguity this whole
+    // field is designed to avoid.
+    const { [field]: _removed, ...rest } = draft
+    return { ...rest, updatedAt: now }
+  }
+
+  return { ...draft, ...answerFor(field, answer), updatedAt: now }
+}
+
+function answerFor(field: AnswerField, answer: PersonalAnswer): Partial<OnboardingDraft> {
+  return field === 'goal' ? { goal: answer } : { why: answer }
+}
+
 /** Mirrors growthAreas.ts so both layers report the same vocabulary. */
 export type GrowthAreaProblem = 'empty' | 'too-long' | 'no-words' | 'duplicate' | 'not-found'
 
@@ -367,9 +477,10 @@ export function resumeStep(draft: OnboardingDraft | null): OnboardingStep {
  * something we cannot show them.
  *
  * Note what it does NOT do: it never touches `customGrowthAreas`, and it
- * never invents a selection. It also cannot lose an answer, because there
- * are no answers in the selection list yet — which is exactly why adding
- * one in Phase 2B must key it by area id.
+ * never invents a selection. It also cannot lose an answer. `goal` and
+ * `why` are not keyed by an id at all (ADR 0010), so no selection change
+ * can reach them, and the per-area data that does key on an id arrives in
+ * Phase 2C — at which point this function must still be left alone.
  */
 export function reconcileSelections(draft: OnboardingDraft): OnboardingDraft {
   const known = new Set(knownGrowthAreas(draft).map((area) => area.id))

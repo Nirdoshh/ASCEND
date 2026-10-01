@@ -94,8 +94,107 @@ describe('migrateAndNormalizeDraft', () => {
     ])
     expect(result?.currentStep).toBe('growth-areas')
     expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
-    // A field this build has no concept of is dropped, not smuggled in.
+    // A bare string is not this build's shape, but it is a shape ASCEND has
+    // plausibly stored, and the sentence is the user's. Adopting it is the
+    // difference between an older build losing a Goal and keeping it.
+    expect(result?.goal).toEqual({ text: 'play a Chopin nocturne' })
+  })
+
+  it('drops a field from a future version that this build has no concept of', () => {
+    // The other half of the rule above. Adopting a shape we recognise is
+    // leniency; inventing one we do not is how a draft acquires a field
+    // that nothing validates, nothing displays and nothing can trust.
+    const result = migrateAndNormalizeDraft(
+      {
+        schemaVersion: 99,
+        currentStep: 'goal',
+        selectedGrowthAreaIds: [],
+        customGrowthAreas: [],
+        milestones: [{ text: 'finish a marathon', done: false }],
+        startedAt: NOW,
+        updatedAt: LATER,
+      },
+      NOW,
+    )
+
+    expect(result).not.toHaveProperty('milestones')
+  })
+
+  it('drops a goal or why that is not text, rather than storing junk', () => {
+    // Corruption, not an older format. Each of these would put something
+    // in front of a textarea that expects a sentence.
+    const junk = [42, true, {}, { text: 42 }, ['Run my first 10K'], { goal: 'x' }, null]
+
+    for (const value of junk) {
+      const result = migrateAndNormalizeDraft(
+        {
+          schemaVersion: ONBOARDING_SCHEMA_VERSION,
+          currentStep: 'goal',
+          selectedGrowthAreaIds: [],
+          customGrowthAreas: [],
+          goal: value,
+          why: value,
+          startedAt: NOW,
+          updatedAt: LATER,
+        },
+        NOW,
+      )
+
+      expect(result, JSON.stringify(value)).not.toHaveProperty('goal')
+      expect(result, JSON.stringify(value)).not.toHaveProperty('why')
+    }
+  })
+
+  it('reads an empty stored answer as unanswered, not as an empty sentence', () => {
+    // Reachable by hand-editing storage, and the one shape that has to be
+    // refused rather than accepted: `{ text: '' }` would claim the user
+    // answered with nothing.
+    const result = migrateAndNormalizeDraft(
+      {
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
+        currentStep: 'goal',
+        selectedGrowthAreaIds: [],
+        customGrowthAreas: [],
+        goal: { text: '   ' },
+        why: '',
+        startedAt: NOW,
+        updatedAt: LATER,
+      },
+      NOW,
+    )
+
     expect(result).not.toHaveProperty('goal')
+    expect(result).not.toHaveProperty('why')
+  })
+
+  it('adopts a bare-string why, which is a shape an older build stored', () => {
+    const result = migrateAndNormalizeDraft(
+      {
+        schemaVersion: 99,
+        currentStep: 'goal',
+        selectedGrowthAreaIds: [],
+        customGrowthAreas: [],
+        why: '  so my daughter sees me finish  ',
+        startedAt: NOW,
+        updatedAt: LATER,
+      },
+      NOW,
+    )
+
+    expect(result?.why).toEqual({ text: 'so my daughter sees me finish' })
+  })
+
+  it('never writes an undefined goal or why key', () => {
+    // The field must be ABSENT when unanswered, never present-and-empty.
+    // `'goal' in draft` is the question the validators ask, so a key
+    // carrying `undefined` would make every unanswered question look
+    // answered while still reading as blank.
+    const result = migrateAndNormalizeDraft(sampleDraft(), NOW)
+
+    expect(result).not.toBeNull()
+    expect('goal' in (result as object)).toBe(false)
+    expect('why' in (result as object)).toBe(false)
+    expect(Object.keys(result as object).some((key) => key === 'goal')).toBe(false)
   })
 
   it('runs registered migrations in order', () => {
