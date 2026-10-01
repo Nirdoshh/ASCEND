@@ -12,6 +12,8 @@ import { createJourneyRepository } from './journeyRepository'
 import type { JourneyRepository } from './journeyRepository'
 import { createDailyPlanRepository } from './dailyPlanRepository'
 import type { DailyPlanRepository } from './dailyPlanRepository'
+import { createTodayWinRepository } from './todayWinRepository'
+import type { TodayWinRepository } from './todayWinRepository'
 import { createWebStorageStore } from '../storage'
 
 /**
@@ -31,3 +33,9 @@ export const defaultJourneyRepository: JourneyRepository =
  */
 export const defaultDailyPlanRepository: DailyPlanRepository =
   createDailyPlanRepository(createWebStorageStore())
+
+/**
+ * The Today's Win repository used by the Today screen.
+ */
+export const defaultTodayWinRepository: TodayWinRepository =
+  createTodayWinRepository(createWebStorageStore())

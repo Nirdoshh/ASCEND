@@ -27,3 +27,9 @@ export {
   type DailyPlanRepository,
   type DailyPlanRepositoryWriteResult,
 } from './dailyPlanRepository'
+
+export {
+  createTodayWinRepository,
+  type TodayWinRepository,
+  type TodayWinRepositoryWriteResult,
+} from './todayWinRepository'
