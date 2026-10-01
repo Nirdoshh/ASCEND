@@ -25,3 +25,13 @@ export const ASCEND_PREFERENCES_KEY = 'ascend:preferences:v1'
  * losing a setting.
  */
 export const ASCEND_ONBOARDING_DRAFT_KEY = 'ascend:onboarding-draft:v1'
+
+/**
+ * The active Journey.
+ *
+ * Separate key, separate version. A Journey is permanent (until the user
+ * deletes it in a future phase), so its schema version is independent of
+ * both the draft and preferences. The draft's ONBOARDING_SCHEMA_VERSION
+ * and the Journey's JOURNEY_SCHEMA_VERSION MUST NOT be conflated.
+ */
+export const ASCEND_JOURNEY_KEY = 'ascend:journey:v1'

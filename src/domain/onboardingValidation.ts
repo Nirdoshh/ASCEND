@@ -327,6 +327,39 @@ export function isMilestoneStepValid(draft: OnboardingDraft | null): StepValidat
 }
 
 /**
+ * The summary step is satisfied when ALL previous steps are satisfied.
+ *
+ * Summary does not ask a question — it is the review screen. Its validity
+ * is defined as "every required answer has been given and is usable". The
+ * individual step validators already enforce this, so the summary validator
+ * checks each of the other validators directly.
+ *
+ * This is the gate that Phase 2D opens. Phase 2B and 2C each did NOT
+ * weaken this gate to make themselves look finished; adding validators
+ * moved the stopping point forward and nothing else.
+ */
+export function isSummaryStepValid(draft: OnboardingDraft | null): StepValidation {
+  if (!draft) return { valid: false, problem: 'not-started', message: 'Onboarding has not been started.' }
+
+  // Check each required step validator directly (excluding 'welcome' and 'summary')
+  const validators: { step: OnboardingStep; fn: StepValidator }[] = [
+    { step: 'growth-areas', fn: isGrowthAreaStepValid },
+    { step: 'goal', fn: isGoalStepValid },
+    { step: 'why', fn: isWhyStepValid },
+    { step: 'duration', fn: isDurationStepValid },
+    { step: 'milestones', fn: isMilestoneStepValid },
+    { step: 'daily-effort', fn: isEffortStepValid },
+  ]
+
+  for (const { fn } of validators) {
+    const result = fn(draft)
+    if (!result.valid) return result
+  }
+
+  return { valid: true }
+}
+
+/**
  * One validator per step, keyed by step.
  *
  * Only the steps that exist have entries. Adding a screen in a later
@@ -341,24 +374,11 @@ export function isMilestoneStepValid(draft: OnboardingDraft | null): StepValidat
  *   isDurationStepValid    implemented
  *   isMilestoneStepValid   implemented
  *   isEffortStepValid      implemented
+ *   isSummaryStepValid     implemented
  *
  * Note there is no validator for `welcome`: the welcome screen asks
  * nothing, so there is nothing to validate, and it is excluded from the
  * scan below.
- *
- * AND NO VALIDATOR FOR `summary`
- *
- * `summary` is the step that creates the Journey, so it is deliberately
- * still absent. `validateOnboardingDraft` therefore CANNOT return
- * `valid: true` in Phase 2C even for a draft where every question has been
- * answered perfectly: the scan reaches `summary`, finds no rule, and stops
- * with `not-answered-yet`.
- *
- * That is the strongest statement this codebase can make that Phase 2D
- * owns the transition. It would have been easy — and wrong — to register a
- * placeholder that returned `valid: true` so the gate would open. Onboarding
- * would then be "complete" with no Journey having been created, and Phase
- * 2D would inherit a gate that has already been satisfied by nobody.
  */
 export type StepValidator = (draft: OnboardingDraft) => StepValidation
 
@@ -372,6 +392,7 @@ const STEP_VALIDATORS: StepValidators = {
   duration: isDurationStepValid,
   milestones: isMilestoneStepValid,
   'daily-effort': isEffortStepValid,
+  summary: isSummaryStepValid,
 }
 
 export type OnboardingValidation =
@@ -394,22 +415,14 @@ export type OnboardingValidation =
  * WHERE IT STOPS, AND WHY THAT IS THE POINT
  *
  * Through Phase 2B that was always `duration`, because no duration screen
- * existed. Through Phase 2C it is always `summary`, because Phase 2C built
+ * existed. Through Phase 2C it was `summary`, because Phase 2C built
  * the duration, milestone and daily-effort questions and deliberately did
  * NOT build the step that creates a Journey.
  *
- * So this build still cannot return `valid: true`, and the reason is a
- * design decision rather than an oversight: the moment onboarding claims a
- * completed draft, something downstream is entitled to create a Journey, and
- * that something is Phase 2D's to write. A placeholder validator that
- * returned `valid: true` for `summary` would have made this gate open
- * without a Journey existing, and the test that asserts the gate is closed
- * would have been the thing standing between the two phases and a Journey
- * built from a draft with nothing behind it.
- *
- * Phase 2B and Phase 2C each did NOT weaken this gate to make themselves
- * look finished. Adding validators moved the stopping point forward and
- * nothing else.
+ * Phase 2D adds the summary validator, so the gate can now open for a
+ * fully valid draft. Phase 2B and Phase 2C each did NOT weaken this gate
+ * to make themselves look finished. Adding validators moved the stopping
+ * point forward and nothing else.
  *
  * The `validators` argument is a seam, not a feature. It exists so the
  * success path and the mid-list failure path can be tested before those

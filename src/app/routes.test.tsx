@@ -59,6 +59,7 @@ describe('routes', () => {
       path: '/onboarding/effort',
       heading: 'How much time can you realistically give this each day?',
     },
+    { path: '/onboarding/summary', heading: 'Your Journey' },
   ] as const
 
   for (const { path, heading } of cases) {

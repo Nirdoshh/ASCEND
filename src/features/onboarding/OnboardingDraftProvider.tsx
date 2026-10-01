@@ -3,6 +3,8 @@ import type { ReactNode } from 'react'
 
 import { createOnboardingDraftRepository } from '../../data/repositories'
 import type { OnboardingDraftRepository } from '../../data/repositories'
+import { createJourneyRepository } from '../../data/repositories/journeyRepository'
+import type { JourneyRepository } from '../../data/repositories/journeyRepository'
 import { createWebStorageStore, type StoreWriteResult } from '../../data/storage'
 import { createGrowthAreaId } from '../../domain/growthAreaId'
 import {
@@ -29,6 +31,8 @@ import {
 } from '../../domain/onboardingDraft'
 import { createMilestoneId } from '../../domain/milestone'
 import type { OnboardingDraft, OnboardingStep } from '../../domain/onboardingDraft'
+import { finalizeOnboarding, getValidationDetails, getIncompleteSteps } from '../../application/finalizeOnboarding'
+import type { FinalizeResult } from '../../application/finalizeOnboarding'
 
 /**
  * The repository onboarding uses by default.
@@ -38,6 +42,12 @@ import type { OnboardingDraft, OnboardingStep } from '../../domain/onboardingDra
  */
 export const defaultOnboardingDraftRepository: OnboardingDraftRepository =
   createOnboardingDraftRepository(createWebStorageStore())
+
+/**
+ * The Journey repository onboarding uses by default.
+ */
+export const defaultJourneyRepository: JourneyRepository =
+  createJourneyRepository(createWebStorageStore())
 
 export interface OnboardingContextValue {
   /** null means "this person has not started yet". */
@@ -98,6 +108,12 @@ export interface OnboardingContextValue {
   /** Removes a milestone. Removing the last one leaves the question unanswered. */
   removeMilestone(id: string): void
   advanceFrom(step: OnboardingStep): void
+  /** Validates the complete draft and returns details for the Summary screen. */
+  getValidationDetails(): ReturnType<typeof getValidationDetails>
+  /** Returns incomplete steps for the Summary screen. */
+  getIncompleteSteps(): ReturnType<typeof getIncompleteSteps>
+  /** Runs the finalization: validate → create Journey → save Journey → clear draft. */
+  finalize(now?: string): Promise<FinalizeResult>
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null)
@@ -121,10 +137,12 @@ const OnboardingContext = createContext<OnboardingContextValue | null>(null)
 export function OnboardingDraftProvider({
   children,
   repository = defaultOnboardingDraftRepository,
+  journeyRepository = defaultJourneyRepository,
 }: {
   children: ReactNode
   /** Injectable so tests can supply an in-memory repository. */
   repository?: OnboardingDraftRepository
+  journeyRepository?: JourneyRepository
 }) {
   const [draft, setDraft] = useState<OnboardingDraft | null>(() => repository.load())
   const [storageStatus, setStorageStatus] = useState<
@@ -306,6 +324,21 @@ export function OnboardingDraftProvider({
     [apply, now],
   )
 
+  const getValidationDetailsFn = useCallback(() => {
+    return getValidationDetails(repository)
+  }, [repository])
+
+  const getIncompleteStepsFn = useCallback(() => {
+    return getIncompleteSteps(repository)
+  }, [repository])
+
+  const finalizeFn = useCallback(
+    async (now?: string): Promise<FinalizeResult> => {
+      return finalizeOnboarding(repository, journeyRepository, now ?? new Date().toISOString())
+    },
+    [repository, journeyRepository],
+  )
+
   const value = useMemo<OnboardingContextValue>(() => {
     // Reconcile on read, not on write: it repairs storage that was
     // hand-edited or written by a different build, and it is a no-op
@@ -331,6 +364,9 @@ export function OnboardingDraftProvider({
       editMilestone,
       removeMilestone,
       advanceFrom,
+      getValidationDetails: getValidationDetailsFn,
+      getIncompleteSteps: getIncompleteStepsFn,
+      finalize: finalizeFn,
     }
   }, [
     draft,
@@ -346,6 +382,9 @@ export function OnboardingDraftProvider({
     editMilestone,
     removeMilestone,
     advanceFrom,
+    getValidationDetailsFn,
+    getIncompleteStepsFn,
+    finalizeFn,
   ])
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>

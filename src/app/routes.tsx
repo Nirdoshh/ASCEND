@@ -8,6 +8,7 @@ import { GoalScreen } from '../features/onboarding/GoalScreen'
 import { GrowthAreasScreen } from '../features/onboarding/GrowthAreasScreen'
 import { MilestonesScreen } from '../features/onboarding/MilestonesScreen'
 import { OnboardingLayout } from '../features/onboarding/OnboardingLayout'
+import { SummaryScreen } from '../features/onboarding/SummaryScreen'
 import { WelcomeScreen } from '../features/onboarding/WelcomeScreen'
 import { WhyScreen } from '../features/onboarding/WhyScreen'
 import { JourneyScreen } from '../features/journey/JourneyScreen'
@@ -97,6 +98,7 @@ export const router = createBrowserRouter([
       { path: 'duration', element: <DurationScreen /> },
       { path: 'milestones', element: <MilestonesScreen /> },
       { path: 'effort', element: <EffortScreen /> },
+      { path: 'summary', element: <SummaryScreen /> },
     ],
   },
 ])

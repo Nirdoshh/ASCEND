@@ -107,14 +107,12 @@ describe('resumeStepInBuild', () => {
   })
 
   it('never routes past the last screen this build has', () => {
-    // Pressing Continue on Effort writes currentStep: 'summary', and the
-    // Summary screen does not exist in Phase 2C. Following it would 404
-    // immediately after a successful looking answer, which is the worst
-    // outcome this app could produce.
+    // Pressing Continue on Effort writes currentStep: 'summary'.
+    // Phase 2D builds the Summary screen, so resume now follows the pointer.
     const complete = finished()
 
     expect(complete.currentStep).toBe('summary')
-    expect(resumeStepInBuild(complete)).toBe('daily-effort')
+    expect(resumeStepInBuild(complete)).toBe('summary')
   })
 
   it('never resumes past a step whose own validator refuses it', () => {
@@ -168,8 +166,7 @@ describe('resumePath', () => {
   })
 
   it('sends somebody past the end of the built path to the LAST built screen', () => {
-    // `daily-effort` is served at `/onboarding/effort`, and the mapping is
-    // explicit rather than derived from the step name.
-    expect(resumePath(finished())).toBe('/onboarding/effort')
+    // `summary` is the last built step in Phase 2D.
+    expect(resumePath(finished())).toBe('/onboarding/summary')
   })
 })

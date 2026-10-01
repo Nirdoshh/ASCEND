@@ -14,18 +14,17 @@ import { answeredSteps } from '../../domain/onboardingValidation'
  * Two independent things can be true at once, and both have to be
  * respected:
  *
- *   the build   `summary` has no screen. A stored
+ *   the build   Phase 2C left `summary` without a screen. A stored
  *               `currentStep: 'daily-effort'` — which is exactly what
- *               pressing Continue on the milestones screen writes — has no
+ *               pressing Continue on the milestones screen writes — had no
  *               URL beyond the effort screen to send anybody to. Following
  *               it would land on a 404 immediately after a successful-looking
  *               answer, which is about the worst outcome this app could
  *               produce.
  *
  *               Phase 2C removed `duration`, `milestones` and `daily-effort`
- *               from this list by building their screens. `summary` is the
- *               only step still in it, and it is there on purpose: Phase 2D
- *               owns the step that creates a Journey.
+ *               from this list by building their screens. Phase 2D builds the
+ *               Summary screen, so `summary` is no longer a dead end.
  *
  *   the data    `currentStep` says where someone was, not whether what
  *               they left there is usable. A draft can sit on `why` with a
@@ -87,6 +86,7 @@ const BUILT_STEPS = [
   'duration',
   'milestones',
   'daily-effort',
+  'summary',
 ] as const
 
 /** A step that has a screen, and therefore a URL. */
@@ -116,6 +116,7 @@ const STEP_PATHS: Record<BuiltStep, string> = {
   duration: '/onboarding/duration',
   milestones: '/onboarding/milestones',
   'daily-effort': '/onboarding/effort',
+  summary: '/onboarding/summary',
 }
 
 /**

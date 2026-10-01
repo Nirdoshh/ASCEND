@@ -594,24 +594,14 @@ describe('validateOnboardingDraft — currentStep means nothing', () => {
     expect(failure(validateOnboardingDraft(draft)).firstIncompleteStep).toBe('goal')
   })
 
-  it('reaches the first unbuilt step and says so honestly', () => {
-    // Phase 2C has rules for growth-areas, goal, why, duration, milestones
-    // and daily-effort, so `summary` cannot be satisfied. Reporting
-    // `not-answered-yet` rather than `unanswered` keeps our gap clearly
-    // distinguishable from a user who skipped a question — and it is the
-    // reason a half-built phase cannot masquerade as a complete one.
-    //
-    // Note WHAT this draft is: every question answered, through the real
-    // setters. It is not a draft with a missing answer being blamed on us.
+  it('reaches the summary step and validates it — Phase 2D opens the gate', () => {
+    // Phase 2D adds the summary validator. A fully answered draft now passes
+    // all validators including summary, so the gate opens.
     const result = validateOnboardingDraft(fullyAnswered())
 
-    expect(result.valid).toBe(false)
-    if (result.valid) return
-    expect(result.firstIncompleteStep).toBe('summary')
-    expect(result.problem).toBe('not-answered-yet')
-    expect(result.message).toBe(
-      'The “summary” step has not been built yet, so onboarding cannot be completed.',
-    )
+    expect(result.valid).toBe(true)
+    if (!result.valid) return
+    expect(result.completedSteps).toContain('summary')
   })
 
   it('stops one step short once every Phase 2C question is answered', () => {
@@ -632,25 +622,23 @@ describe('validateOnboardingDraft — currentStep means nothing', () => {
     expect(failure(validateOnboardingDraft(withMilestonesAnswered)).firstIncompleteStep).toBe(
       'daily-effort',
     )
-    expect(failure(validateOnboardingDraft(fullyAnswered())).firstIncompleteStep).toBe('summary')
+    // Phase 2D: a fully answered draft now reaches the summary step and is valid.
+    // The summary validator checks that all previous steps are satisfied.
+    expect(validateOnboardingDraft(fullyAnswered()).valid).toBe(true)
   })
 
-  it('cannot be made valid by this build, and does not pretend otherwise', () => {
-    // The single most important assertion about Phase 2C. A phase that
-    // quietly relaxed validateOnboardingDraft to make itself look finished
-    // would let a Journey be created from a draft with no Summary step
-    // behind it — and the Summary step is what creates the Journey.
-    //
-    // Every answer correct, and a currentStep claiming the end: still
-    // refused, and refused at `summary` specifically. Phase 2D owns the
-    // transition, and this test is what stops Phase 2C from having made it.
-    const complete = withField(fullyAnswered(), 'currentStep', 'summary')
+  it('returns valid for a fully answered draft — Phase 2D opens the gate', () => {
+    // Phase 2D adds the summary validator. A draft that has answered every
+    // required question is now valid, and the gate opens. The summary step
+    // does not ask a question; it is the review screen. Its validity is
+    // defined as "every required answer has been given and is usable".
+    const complete = fullyAnswered()
 
     const result = validateOnboardingDraft(complete)
 
-    expect(result.valid).toBe(false)
-    if (result.valid) return
-    expect(result.firstIncompleteStep).toBe('summary')
+    expect(result.valid).toBe(true)
+    if (!result.valid) return
+    expect(result.completedSteps).toContain('summary')
   })
 
   it('does not depend on a custom area any more than a suggested one', () => {
