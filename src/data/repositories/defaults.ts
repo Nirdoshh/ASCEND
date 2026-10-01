@@ -14,6 +14,8 @@ import { createDailyPlanRepository } from './dailyPlanRepository'
 import type { DailyPlanRepository } from './dailyPlanRepository'
 import { createTodayWinRepository } from './todayWinRepository'
 import type { TodayWinRepository } from './todayWinRepository'
+import { createDailyStepsRepository } from './dailyStepsRepository'
+import type { DailyStepsRepository } from './dailyStepsRepository'
 import { createWebStorageStore } from '../storage'
 
 /**
@@ -39,3 +41,9 @@ export const defaultDailyPlanRepository: DailyPlanRepository =
  */
 export const defaultTodayWinRepository: TodayWinRepository =
   createTodayWinRepository(createWebStorageStore())
+
+/**
+ * The Daily Steps repository used by the Today screen.
+ */
+export const defaultDailyStepsRepository: DailyStepsRepository =
+  createDailyStepsRepository(createWebStorageStore())

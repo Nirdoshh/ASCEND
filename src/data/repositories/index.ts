@@ -33,3 +33,9 @@ export {
   type TodayWinRepository,
   type TodayWinRepositoryWriteResult,
 } from './todayWinRepository'
+
+export {
+  createDailyStepsRepository,
+  type DailyStepsRepository,
+  type DailyStepsRepositoryWriteResult,
+} from './dailyStepsRepository'

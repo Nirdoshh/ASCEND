@@ -138,6 +138,17 @@ describe('todayWinRepository', () => {
       const stored = JSON.parse(window.localStorage.getItem(key)!)
       expect(stored.id).toBe('tw_existing12345678')
     })
+
+    it('updates an existing win when the id is unchanged', () => {
+      const repo = createRepo()
+      const existingWin = createWin({ id: 'tw_existing12345678' })
+      const key = todayWinStorageKey(DAILY_PLAN_ID)
+      window.localStorage.setItem(key, JSON.stringify(existingWin))
+
+      const updatedWin = { ...existingWin, text: 'Updated auth flow' }
+      expect(repo.save(updatedWin)).toBe('ok')
+      expect(repo.loadForPlan(DAILY_PLAN_ID)?.text).toBe('Updated auth flow')
+    })
   })
 
   describe('existsForPlan', () => {

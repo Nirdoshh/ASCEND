@@ -48,7 +48,7 @@ export function createTodayWinRepository(store: KeyValueStore): TodayWinReposito
         // Existing win found — cannot create a second one
         // Return the existing one instead of overwriting
         const existing = normalizeTodayWin(existingRaw, nowIso())
-        if (existing) {
+        if (existing && existing.id !== win.id) {
           return 'ok'
         }
       }
