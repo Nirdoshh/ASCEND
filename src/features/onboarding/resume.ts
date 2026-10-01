@@ -14,12 +14,18 @@ import { answeredSteps } from '../../domain/onboardingValidation'
  * Two independent things can be true at once, and both have to be
  * respected:
  *
- *   the build   `duration`, `milestones`, `daily-effort` and `summary`
- *               have no screens. A stored `currentStep: 'duration'` — which
- *               is exactly what pressing Continue on the WHY writes — has
- *               no URL to send anybody to. Following it would land on a
- *               404 immediately after a successful-looking answer, which
- *               is about the worst outcome this app could produce.
+ *   the build   `summary` has no screen. A stored
+ *               `currentStep: 'daily-effort'` — which is exactly what
+ *               pressing Continue on the milestones screen writes — has no
+ *               URL beyond the effort screen to send anybody to. Following
+ *               it would land on a 404 immediately after a successful-looking
+ *               answer, which is about the worst outcome this app could
+ *               produce.
+ *
+ *               Phase 2C removed `duration`, `milestones` and `daily-effort`
+ *               from this list by building their screens. `summary` is the
+ *               only step still in it, and it is there on purpose: Phase 2D
+ *               owns the step that creates a Journey.
  *
  *   the data    `currentStep` says where someone was, not whether what
  *               they left there is usable. A draft can sit on `why` with a
@@ -73,7 +79,15 @@ import { answeredSteps } from '../../domain/onboardingValidation'
  */
 
 /** The steps this build can show, in order. Grows one entry per phase. */
-const BUILT_STEPS = ['welcome', 'growth-areas', 'goal', 'why'] as const
+const BUILT_STEPS = [
+  'welcome',
+  'growth-areas',
+  'goal',
+  'why',
+  'duration',
+  'milestones',
+  'daily-effort',
+] as const
 
 /** A step that has a screen, and therefore a URL. */
 export type BuiltStep = (typeof BUILT_STEPS)[number]
@@ -86,12 +100,22 @@ export type BuiltStep = (typeof BUILT_STEPS)[number]
  * update when a step is added — mitigated by the route smoke test in
  * `app/routes.test.tsx`, which cold-loads every URL through the real
  * router, so a forgotten route fails a test rather than a person.
+ *
+ * The mapping is NOT derived from the step name, and `daily-effort` is the
+ * proof: its URL is `/onboarding/effort`. A derivation would have produced
+ * `/onboarding/daily-effort`, which is a worse URL in a person's address
+ * bar, and renaming a STEP to fix that would change the stored
+ * `currentStep` of every draft already on disk. Keeping the mapping
+ * explicit is what lets the URL and the stored value disagree on purpose.
  */
 const STEP_PATHS: Record<BuiltStep, string> = {
   welcome: '/onboarding',
   'growth-areas': '/onboarding/areas',
   goal: '/onboarding/goal',
   why: '/onboarding/why',
+  duration: '/onboarding/duration',
+  milestones: '/onboarding/milestones',
+  'daily-effort': '/onboarding/effort',
 }
 
 /**

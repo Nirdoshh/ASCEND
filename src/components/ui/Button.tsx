@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 
 import { cn } from '../../lib/cn'
 import './Button.css'
@@ -14,6 +14,21 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Stretches to the container width. Useful for the one CTA on a screen. */
   fullWidth?: boolean
   leadingIcon?: ReactNode
+  /**
+   * Exposed so a screen can move focus back to the control it came from.
+   *
+   * The case that needed it: the Milestones screen opens a composer from a row,
+   * then closes it again. The button that opened it is still on screen
+   * afterwards, and a keyboard user who has just saved or cancelled an edit
+   * should be put back where they were rather than dropped at the top of the
+   * document. Focus that nobody places is focus the user has to hunt for.
+   *
+   * `ButtonHTMLAttributes` does not carry `ref` (that lives in
+   * ClassAttributes), so it has to be declared — and because this is React 19
+   * it needs no `forwardRef` wrapper: `ref` arrives as an ordinary prop and
+   * `{...rest}` passes it to the <button>.
+   */
+  ref?: Ref<HTMLButtonElement>
 }
 
 /**

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import { suggestedGrowthAreaId } from '../../domain/growthAreaId'
-import { completeStep, createOnboardingDraft, selectGrowthArea, setGoal } from '../../domain/onboardingDraft'
+import {
+  addMilestone,
+  completeStep,
+  createOnboardingDraft,
+  selectGrowthArea,
+  setDailyEffortMinutes,
+  setDurationDays,
+  setGoal,
+  setWhy,
+} from '../../domain/onboardingDraft'
 import type { OnboardingDraft } from '../../domain/onboardingDraft'
 import { hasStartedOnboarding, resumePath, resumeStepInBuild } from './resume'
 
@@ -19,6 +28,25 @@ function justStarted(): OnboardingDraft {
 
 function withAreasAndGoal(): OnboardingDraft {
   return completeStep(setGoal(withAreas(), 'Run my first 10K', T0), 'goal', T0)
+}
+
+function withWhyAnswered(): OnboardingDraft {
+  return completeStep(setWhy(withAreasAndGoal(), 'Because I can', T0), 'why', T0)
+}
+
+function withDurationAnswered(): OnboardingDraft {
+  return completeStep(setDurationDays(withWhyAnswered(), 30, T0), 'duration', T0)
+}
+
+function withMilestonesAnswered(): OnboardingDraft {
+  const result = addMilestone(withDurationAnswered(), 'ms_first', 'Run 5 km', T0)
+  if (!result.ok) throw new Error(result.message)
+  return completeStep(result.draft, 'milestones', T0)
+}
+
+/** Every question this build asks, answered, and Continue pressed on Effort. */
+function finished(): OnboardingDraft {
+  return completeStep(setDailyEffortMinutes(withMilestonesAnswered(), 20, T0), 'daily-effort', T0)
 }
 
 describe('resumeStepInBuild', () => {
@@ -60,13 +88,33 @@ describe('resumeStepInBuild', () => {
     expect(resumeStepInBuild(withAreasAndGoal())).toBe('why')
   })
 
+  it('resumes the Duration when the WHY is written and Continue was pressed', () => {
+    // Through Phase 2B this draft was sent back to the WHY, because
+    // `duration` had no screen. Phase 2C built it, so the pointer is now
+    // followed instead of clamped.
+    expect(withWhyAnswered().currentStep).toBe('duration')
+    expect(resumeStepInBuild(withWhyAnswered())).toBe('duration')
+  })
+
+  it('resumes the Milestones when the Duration is answered and Continue was pressed', () => {
+    expect(withDurationAnswered().currentStep).toBe('milestones')
+    expect(resumeStepInBuild(withDurationAnswered())).toBe('milestones')
+  })
+
+  it('resumes the Daily Effort when the Milestones are answered', () => {
+    expect(withMilestonesAnswered().currentStep).toBe('daily-effort')
+    expect(resumeStepInBuild(withMilestonesAnswered())).toBe('daily-effort')
+  })
+
   it('never routes past the last screen this build has', () => {
-    // Pressing Continue on the WHY writes currentStep: 'duration', which
-    // has no URL. Following it would 404 immediately after a successful
-    // looking answer.
-    const finished = completeStep(withAreasAndGoal(), 'why', T0)
-    expect(finished.currentStep).toBe('duration')
-    expect(resumeStepInBuild(finished)).toBe('why')
+    // Pressing Continue on Effort writes currentStep: 'summary', and the
+    // Summary screen does not exist in Phase 2C. Following it would 404
+    // immediately after a successful looking answer, which is the worst
+    // outcome this app could produce.
+    const complete = finished()
+
+    expect(complete.currentStep).toBe('summary')
+    expect(resumeStepInBuild(complete)).toBe('daily-effort')
   })
 
   it('never resumes past a step whose own validator refuses it', () => {
@@ -78,6 +126,27 @@ describe('resumeStepInBuild', () => {
     const draft: OnboardingDraft = { ...completeStep(broken, 'why', T0) }
 
     expect(resumeStepInBuild(draft)).toBe('goal')
+  })
+
+  it('sends an out-of-range stored Duration back to the Duration question', () => {
+    // The pointer says milestones; the number says the answer is not usable.
+    // Validity is read from the data, never from the pointer.
+    const draft = setDurationDays(withWhyAnswered(), 500, T0)
+
+    expect(draft.currentStep).toBe('duration')
+    expect(resumeStepInBuild(draft)).toBe('duration')
+  })
+
+  it('sends a draft with an over-full milestone list back to the Milestones question', () => {
+    const overfull = {
+      ...withMilestonesAnswered(),
+      milestones: Array.from({ length: 6 }, (_, index) => ({
+        id: `ms_${index}`,
+        text: `Milestone ${index}`,
+      })),
+    }
+
+    expect(resumeStepInBuild(overfull)).toBe('milestones')
   })
 
   it('reports nothing as started for an unanswered draft', () => {
@@ -93,5 +162,14 @@ describe('resumePath', () => {
     expect(resumePath(justStarted())).toBe('/onboarding/areas')
     expect(resumePath(completeStep(withAreas(), 'growth-areas', T0))).toBe('/onboarding/goal')
     expect(resumePath(withAreasAndGoal())).toBe('/onboarding/why')
+    expect(resumePath(withWhyAnswered())).toBe('/onboarding/duration')
+    expect(resumePath(withDurationAnswered())).toBe('/onboarding/milestones')
+    expect(resumePath(withMilestonesAnswered())).toBe('/onboarding/effort')
+  })
+
+  it('sends somebody past the end of the built path to the LAST built screen', () => {
+    // `daily-effort` is served at `/onboarding/effort`, and the mapping is
+    // explicit rather than derived from the step name.
+    expect(resumePath(finished())).toBe('/onboarding/effort')
   })
 })

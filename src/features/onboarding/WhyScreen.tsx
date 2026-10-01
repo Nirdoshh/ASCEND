@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { MAX_WHY_LENGTH } from '../../domain/personalAnswer'
 import { isWhyStepValid } from '../../domain/onboardingValidation'
@@ -25,15 +26,22 @@ import { useOnboarding } from './OnboardingDraftProvider'
  *     read as a verdict. They wrote a true thing about themselves; that is
  *     the whole achievement.
  *
- * WHY NO NAVIGATION FORWARD
+ * WHY IT NOW HAS SOMEWHERE TO GO, AND WHY THE BOUNDARY NOTE IS GONE
  *
- * This is the last step Phase 2B builds, so Continue does not go anywhere.
- * It says so, in the same voice Phase 2A used at the end of the Growth
- * Areas step: the answers are saved, the next question is real and planned,
- * and it is not here yet. A button that silently did nothing would be the
- * single most dishonest thing this screen could do.
+ * Through Phase 2B this was the last built step, so Continue said so and
+ * stopped. Phase 2C built the duration question, so the boundary moved
+ * forward and this is now an ordinary step. The `finishedMessage` prop is
+ * gone from the call rather than left in place: a configuration option that
+ * is never passed is one that rots, and the note it produced — "the next
+ * question is not built yet" — would now be actively false.
+ *
+ * `AnswerStepScreen` still supports `finishedMessage`, because the Daily
+ * Effort screen at the other end of Phase 2C needs exactly that treatment.
+ * The prop is not dead; it just belongs to the last step, and the last step
+ * moved.
  */
 export function WhyScreen() {
+  const navigate = useNavigate()
   const { draft, setWhy, advanceFrom } = useOnboarding()
 
   const [text, setText] = useState(() => draft?.why?.text ?? '')
@@ -53,9 +61,12 @@ export function WhyScreen() {
       validation={isWhyStepValid(draft)}
       onContinue={() => {
         advanceFrom('why')
+        // React Router 7 types navigate() as possibly returning a promise.
+        // There is nothing to await here, so `void` states that rather than
+        // silencing a real check.
+        void navigate('/onboarding/duration')
       }}
       backTo="/onboarding/goal"
-      finishedMessage="Your answers are saved. The next question is how long you want to work on this, and that part is not built yet."
     />
   )
 }

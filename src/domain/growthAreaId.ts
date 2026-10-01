@@ -60,7 +60,15 @@
  * instead of asserting against randomness.
  */
 
-const ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
+import { HASHED_SUFFIX_CHARACTERS, hashedIdSuffix, randomIdCharacters } from './idHash'
+
+/**
+ * The hash and the random-character source live in idHash.ts, because a
+ * milestone needs the same two things and a second copy of a hash is two
+ * sets of ids. Everything below is only about the namespace. See
+ * idHash.ts, and growthAreas.test.ts for the pinned `ga_m_` value that
+ * proves this extraction changed no id anybody already has on disk.
+ */
 
 /** Where each id came from. Readable from the id itself. */
 export const SUGGESTED_ID_PREFIX = 'ga_s_'
@@ -71,14 +79,12 @@ export const MIGRATED_ID_PREFIX = 'ga_m_'
  * Suffix lengths, after the namespace prefix.
  *
  * Kept as named constants rather than inline numbers because the no-collision
- * argument above depends on them, and a test asserts them. The hashed form is
- * two equal halves, so its length is derived rather than typed, which keeps
- * "the two spaces cannot collide" true by construction instead of by two
- * numbers agreeing.
+ * argument above depends on them, and a test asserts them. The random width
+ * is the one thing kept here rather than read from idHash.ts, because it is
+ * a claim about THIS namespace: how many characters `createGrowthAreaId`
+ * puts after `ga_c_`.
  */
 const RANDOM_ID_LENGTH = 16
-const HASH_HALF_LENGTH = 7
-const HASHED_ID_LENGTH = HASH_HALF_LENGTH * 2
 
 /** The longest suggested slug, "communication". Asserted in a test. */
 export const LONGEST_SUGGESTED_SLUG_LENGTH = 13
@@ -112,23 +118,7 @@ export function createGrowthAreaId(): string {
     return CUSTOM_ID_PREFIX + source.randomUUID().replaceAll('-', '').slice(0, RANDOM_ID_LENGTH)
   }
 
-  return CUSTOM_ID_PREFIX + randomCharacters(RANDOM_ID_LENGTH, source)
-}
-
-function randomCharacters(length: number, source: Crypto | undefined): string {
-  const bytes = new Uint8Array(length)
-
-  if (typeof source?.getRandomValues === 'function') {
-    source.getRandomValues(bytes)
-  } else {
-    for (let index = 0; index < length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256)
-    }
-  }
-
-  let out = ''
-  for (const byte of bytes) out += ALPHABET[byte % ALPHABET.length]
-  return out
+  return CUSTOM_ID_PREFIX + randomIdCharacters(RANDOM_ID_LENGTH, source)
 }
 
 /**
@@ -169,26 +159,12 @@ export function migratedGrowthAreaId(normalizedName: string): string {
  * prefix back to `ga_` and reintroduced v2's ambiguity.
  */
 export function migratedGrowthAreaSuffix(normalizedName: string): string {
-  if (RANDOM_ID_LENGTH === HASHED_ID_LENGTH) {
+  if (RANDOM_ID_LENGTH === HASHED_SUFFIX_CHARACTERS) {
     // Unreachable with the constants above. If it ever became reachable, two
     // ids from different namespaces could be indistinguishable, so it is
     // enforced rather than assumed.
     throw new RangeError('custom and migrated id suffixes must differ in length')
   }
 
-  const low = fnv1a(normalizedName, 0).toString(36).padStart(HASH_HALF_LENGTH, '0')
-  const high = fnv1a(normalizedName, 0x9e3779b9).toString(36).padStart(HASH_HALF_LENGTH, '0')
-
-  return low + high
-}
-
-function fnv1a(text: string, seed: number): number {
-  let hash = 0x811c9dc5 ^ seed
-
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193)
-  }
-
-  return hash >>> 0
+  return hashedIdSuffix(normalizedName)
 }

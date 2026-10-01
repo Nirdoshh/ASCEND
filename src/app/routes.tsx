@@ -2,8 +2,11 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 
 import { AppShell } from './AppShell'
 import { DesignSystemScreen } from '../features/designsystem/DesignSystemScreen'
+import { DurationScreen } from '../features/onboarding/DurationScreen'
+import { EffortScreen } from '../features/onboarding/EffortScreen'
 import { GoalScreen } from '../features/onboarding/GoalScreen'
 import { GrowthAreasScreen } from '../features/onboarding/GrowthAreasScreen'
+import { MilestonesScreen } from '../features/onboarding/MilestonesScreen'
 import { OnboardingLayout } from '../features/onboarding/OnboardingLayout'
 import { WelcomeScreen } from '../features/onboarding/WelcomeScreen'
 import { WhyScreen } from '../features/onboarding/WhyScreen'
@@ -83,6 +86,17 @@ export const router = createBrowserRouter([
       { path: 'areas', element: <GrowthAreasScreen /> },
       { path: 'goal', element: <GoalScreen /> },
       { path: 'why', element: <WhyScreen /> },
+      /*
+       * The step id and the URL deliberately disagree at the end:
+       * `daily-effort` is served at `/onboarding/effort`. The mapping is
+       * explicit in resume.ts, which explains why it is not derived from the
+       * step name — a derivation would have produced a worse address bar, and
+       * renaming the STEP to fix that would rewrite the stored `currentStep`
+       * of every draft already on disk.
+       */
+      { path: 'duration', element: <DurationScreen /> },
+      { path: 'milestones', element: <MilestonesScreen /> },
+      { path: 'effort', element: <EffortScreen /> },
     ],
   },
 ])

@@ -11,9 +11,19 @@ import { createWebStorageStore } from '../../data/storage'
 import { ASCEND_ONBOARDING_DRAFT_KEY } from '../../data/storage/keys'
 import { suggestedGrowthAreaId } from '../../domain/growthAreaId'
 import { ONBOARDING_SCHEMA_VERSION } from '../../domain/onboardingDraft'
+import {
+  MAX_DAILY_EFFORT_MINUTES,
+  MAX_DURATION_DAYS,
+  MIN_DAILY_EFFORT_MINUTES,
+  MIN_DURATION_DAYS,
+} from '../../domain/schedule'
 import { MAX_GOAL_LENGTH, MAX_WHY_LENGTH } from '../../domain/personalAnswer'
+import { MAX_MILESTONES, MAX_MILESTONE_LENGTH } from '../../domain/milestone'
+import { DurationScreen } from './DurationScreen'
+import { EffortScreen } from './EffortScreen'
 import { GoalScreen } from './GoalScreen'
 import { GrowthAreasScreen } from './GrowthAreasScreen'
+import { MilestonesScreen } from './MilestonesScreen'
 import { OnboardingLayout } from './OnboardingLayout'
 import { WelcomeScreen } from './WelcomeScreen'
 import { WhyScreen } from './WhyScreen'
@@ -40,6 +50,20 @@ import { WhyScreen } from './WhyScreen'
 const QUESTION = 'What do you want to improve?'
 const GOAL_QUESTION = 'What would you love to achieve?'
 const WHY_QUESTION = 'Why does this matter to you?'
+const DURATION_QUESTION = 'How long do you want to work toward this?'
+const MILESTONES_QUESTION = 'What would prove you’re making progress?'
+const EFFORT_QUESTION = 'How much time can you realistically give this each day?'
+
+/** The URL of every step this build can show, in order. */
+const STEP_URLS = {
+  welcome: '/onboarding',
+  areas: '/onboarding/areas',
+  goal: '/onboarding/goal',
+  why: '/onboarding/why',
+  duration: '/onboarding/duration',
+  milestones: '/onboarding/milestones',
+  effort: '/onboarding/effort',
+} as const
 
 /**
  * Words ASCEND must never use, in any screen.
@@ -53,7 +77,11 @@ const WHY_QUESTION = 'Why does this matter to you?'
 const BANNED_WORDS = [
   /\bquests?\b/i,
   /\bXP\b/,
-  /\bpoints?\b/i,
+  // "points", never the bare verb "point". The Milestones copy says "real
+  // outcomes you can point to along the way", which is ordinary English, and
+  // the gamification term this rule exists to catch is always plural — the
+  // "Growth Points" of a later phase, and "Earn points" chips.
+  /\bpoints\b/i,
   /\branks?\b/i,
   /\bboss\b/i,
   /\bstreaks?\b/i,
@@ -87,6 +115,9 @@ function renderOnboarding(
           { path: 'areas', element: <GrowthAreasScreen /> },
           { path: 'goal', element: <GoalScreen /> },
           { path: 'why', element: <WhyScreen /> },
+          { path: 'duration', element: <DurationScreen /> },
+          { path: 'milestones', element: <MilestonesScreen /> },
+          { path: 'effort', element: <EffortScreen /> },
         ],
       },
     ],
@@ -702,7 +733,13 @@ describe('an earlier choice changing never destroys work', () => {
     expect(storedSelection()).toEqual([suggestedGrowthAreaId('reading')])
   })
 
-  it('never records a duration, milestone or effort answer in 2B', async () => {
+  it('records nothing for the later questions just by arriving at Duration', async () => {
+    // The Phase 2C fields are all optional-and-absent, and this is the test
+    // that keeps them that way. Pressing Continue on the WHY writes
+    // `currentStep: 'duration'` and nothing else: no `durationDays: 0`, no
+    // `milestones: []`, no `dailyEffortMinutes`. An empty list or a zero
+    // here would be a claim the user answered, and it would pass a step that
+    // exists to ask the question.
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/areas' })
 
@@ -716,11 +753,8 @@ describe('an earlier choice changing never destroys work', () => {
     await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
     await user.type(screen.getByLabelText(WHY_QUESTION), 'Because I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
 
-    // Phase 2C's fields cannot hold fake defaults, because they do not
-    // exist in the stored shape at all. Only the two fields this phase
-    // really implemented are present.
     const stored = readStoredDraft() ?? {}
     expect(Object.keys(stored).sort()).toEqual([
       'currentStep',
@@ -1036,8 +1070,9 @@ describe('when storage is unavailable', () => {
     expect(field).toHaveValue('Because I want to prove I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    // No Journey, no draft, and an honest note rather than a fake success.
-    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    // No Journey, no draft, and the real next question rather than a fake
+    // success.
+    expect(await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })).toBeInTheDocument()
     expect(readStoredDraft()).toBeNull()
   })
 })
@@ -1315,7 +1350,7 @@ describe('continuing', () => {
     expect(storedSelection()).toEqual([suggestedGrowthAreaId('fitness')])
   })
 
-  it('still creates no journey and no real data, two steps later', async () => {
+  it('still creates no journey and no real data, six steps later', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/areas' })
 
@@ -1328,10 +1363,26 @@ describe('continuing', () => {
     await screen.findByRole('heading', { level: 1, name: WHY_QUESTION })
     await user.type(screen.getByLabelText(WHY_QUESTION), 'Because I want to prove I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    // All the way to the end of the built path, answering everything on the
+    // way. This is the strongest version of the claim: even a user who has
+    // given every answer this build can accept has created nothing but a
+    // draft. Phase 2D creates the Journey, and Phase 2C must not.
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+    await user.click(screen.getByRole('button', { name: '30 days' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+    await user.click(screen.getByRole('button', { name: /add a milestone/i }))
+    await user.type(screen.getByLabelText(/add a milestone/i), 'Run 5 km without stopping')
+    await user.click(screen.getByRole('button', { name: /add it/i }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+    await user.click(screen.getByRole('button', { name: '20 minutes' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
     await screen.findByText(/not built yet/i)
 
-    // The draft is the ONLY thing written anywhere. Phase 2B creates no
-    // Journey, no Day 1 plan and no points.
+    // The draft is the ONLY thing written anywhere. This build creates no
+    // Journey, no Day 1 plan, no Growth Points and no completion state.
     expect(Object.keys(window.localStorage)).toEqual([ASCEND_ONBOARDING_DRAFT_KEY])
   })
 
@@ -1665,24 +1716,30 @@ describe('why it matters to you', () => {
     await user.paste('y'.repeat(MAX_WHY_LENGTH))
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
   })
 
-  it('says plainly where the build stops, and offers a way back', async () => {
-    // Phase 2C's duration question does not exist. A Continue button that
-    // quietly goes nowhere, or a success screen for something unbuilt,
-    // would be the most dishonest thing this step could do.
+  it('goes on to the Duration question, which now exists', async () => {
+    // Through Phase 2B this screen carried the boundary note — the next
+    // question did not exist. Phase 2C built it, so the honest thing now is
+    // to move, and the boundary note belongs to whichever screen is last.
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/why' })
 
     await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I want to prove I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^continue$/i })).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('duration')
+    // The answer travelled with them.
+    expect(readStoredDraft()?.why).toEqual({ text: 'Because I want to prove I can' })
 
-    await user.click(screen.getByRole('button', { name: /change my answer/i }))
-
+    // And Back returns to the WHY with it still there.
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
     expect(await screen.findByLabelText(WHY_QUESTION)).toHaveValue('Because I want to prove I can')
   })
 
@@ -1692,7 +1749,7 @@ describe('why it matters to you', () => {
 
     await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I want to prove I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
 
     first.unmount()
     renderOnboarding({ startAt: '/onboarding/why' })
@@ -1735,17 +1792,17 @@ describe('why it matters to you', () => {
     await user.tab()
     expect(screen.getByRole('button', { name: /continue/i })).toHaveFocus()
     await user.keyboard('{Enter}')
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
 
-    // From the boundary note the way back is still reachable. Two stops,
-    // because Continue was replaced rather than moved: the focused element
-    // is gone, so focus starts over at the top of the document.
+    // The Continue button that had focus is gone with its screen, so focus
+    // starts over at the top of the new one. Two stops reach the question:
+    // the skip link, then the first preset. Every option after that is an
+    // ordinary button in the tab order, so the whole step is operable from
+    // the keyboard without ever using a pointer.
     await user.tab()
     expect(screen.getByRole('link', { name: /skip to the question/i })).toHaveFocus()
     await user.tab()
-    expect(screen.getByLabelText(WHY_QUESTION)).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('button', { name: /change my answer/i })).toHaveFocus()
+    expect(screen.getByRole('button', { name: '21 days' })).toHaveFocus()
   })
 
   it('never invents a reason on the user’s behalf', async () => {
@@ -1756,9 +1813,830 @@ describe('why it matters to you', () => {
 
     await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
 
     expect(readStoredDraft()?.why).toEqual({ text: 'Because I can' })
+  })
+})
+
+/**
+ * A stored draft that has answered the Phase 2B questions and stopped.
+ *
+ * Built from the real suggestion id, so this fixture cannot drift away from a
+ * shape the app actually writes.
+ */
+function storedPhase2BDraft(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: ONBOARDING_SCHEMA_VERSION,
+    currentStep: 'duration',
+    selectedGrowthAreaIds: [suggestedGrowthAreaId('fitness')],
+    customGrowthAreas: [],
+    goal: { text: 'Run my first 10K' },
+    why: { text: 'Because I can' },
+    startedAt: '2026-10-01T09:00:00.000Z',
+    updatedAt: '2026-10-01T09:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function storedMilestones() {
+  return (readStoredDraft()?.milestones ?? []) as { id: string; text: string }[]
+}
+
+/** Fills in and submits the milestone composer, whichever form is open. */
+async function submitMilestone(
+  user: ReturnType<typeof userEvent.setup>,
+  text: string,
+  { editing = false }: { editing?: boolean } = {},
+) {
+  if (!editing) {
+    await user.click(screen.getByRole('button', { name: /add a milestone/i }))
+  }
+
+  const field = screen.getByLabelText(editing ? 'Change this milestone' : 'Add a milestone')
+  if (editing) await user.clear(field)
+  await user.type(field, text)
+  await user.click(screen.getByRole('button', { name: editing ? /^save$/i : /^add it$/i }))
+}
+
+describe('the duration question', () => {
+  it('asks the question, offers every preset, and says nothing it cannot keep', async () => {
+    renderOnboarding({ startAt: STEP_URLS.duration })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/pick a span you can picture/i)).toBeInTheDocument()
+
+    for (const days of [21, 30, 45, 60, 90]) {
+      expect(screen.getByRole('button', { name: `${days} days` })).toBeInTheDocument()
+    }
+  })
+
+  it('uses no game, technical or productivity jargon', async () => {
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    const text = document.body.textContent ?? ''
+    for (const pattern of BANNED_WORDS) {
+      expect(text, `unexpected jargon matching ${pattern}`).not.toMatch(pattern)
+    }
+  })
+
+  it('holds Continue until something is chosen, and shows the reason under it', async () => {
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled()
+    expect(screen.getByText('Choose how many days you want.')).toBeInTheDocument()
+  })
+
+  it('records a preset and moves on to the Milestones question', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: '30 days' }))
+
+    expect(readStoredDraft()?.durationDays).toBe(30)
+    expect(screen.getByText('30 days. You can change this later.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION }),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('milestones')
+  })
+
+  it('records a custom whole number inside the range', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+    await user.type(screen.getByLabelText('How many days?'), '120')
+    await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+    expect(readStoredDraft()?.durationDays).toBe(120)
+    expect(await screen.findByText('120 days. You can change this later.')).toBeInTheDocument()
+  })
+
+  it('refuses a custom value below the minimum, names the range, and moves focus to the box', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+    const field = screen.getByLabelText('How many days?')
+    await user.type(field, String(MIN_DURATION_DAYS - 1))
+    await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+    expect(
+      await screen.findByText(`Choose between ${MIN_DURATION_DAYS} and ${MAX_DURATION_DAYS} days.`),
+    ).toBeInTheDocument()
+    expect(field).toHaveFocus()
+    expect(readStoredDraft()?.durationDays).toBeUndefined()
+  })
+
+  it('refuses a custom value above the maximum', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+    await user.type(screen.getByLabelText('How many days?'), String(MAX_DURATION_DAYS + 1))
+    await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+    expect(
+      await screen.findByText(`Choose between ${MIN_DURATION_DAYS} and ${MAX_DURATION_DAYS} days.`),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.durationDays).toBeUndefined()
+  })
+
+  it('accepts exactly the minimum and exactly the maximum', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+
+    for (const value of [MIN_DURATION_DAYS, MAX_DURATION_DAYS]) {
+      const field = screen.getByLabelText('How many days?')
+      await user.clear(field)
+      await user.type(field, String(value))
+      await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+      expect(readStoredDraft()?.durationDays, String(value)).toBe(value)
+
+      // Re-open for the second value; a successful submit closes the box.
+      if (value === MIN_DURATION_DAYS) {
+        await user.click(screen.getByRole('button', { name: 'Something else' }))
+      }
+    }
+  })
+
+  it('refuses zero, a fraction and a non-number with a message about whole numbers', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+
+    for (const bad of ['0', '30.5', 'thirty']) {
+      const field = screen.getByLabelText('How many days?')
+      await user.clear(field)
+      await user.type(field, bad)
+      await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+      expect(field, bad).toHaveFocus()
+      expect(readStoredDraft()?.durationDays, bad).toBeUndefined()
+    }
+  })
+
+  it('says what to type when the custom box is empty', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+    await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+    expect(await screen.findByText('Type how many days you want.')).toBeInTheDocument()
+  })
+
+  it('cancelling the custom box is a real cancel', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+    await user.type(screen.getByLabelText('How many days?'), '120')
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(screen.queryByLabelText('How many days?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Something else' })).toBeInTheDocument()
+    expect(readStoredDraft()?.durationDays).toBeUndefined()
+  })
+
+  it('opens the box by itself, pre-filled, when the STORED value is out of range', async () => {
+    // Only reachable from hand-edited storage or a build with different
+    // bounds. Nothing is silently discarded and nothing is rewritten to the
+    // nearest allowed number; the user is shown what this build read.
+    renderWithStoredDraft(
+      storedPhase2BDraft({ durationDays: MAX_DURATION_DAYS + 235 }),
+      STEP_URLS.duration,
+    )
+
+    expect(await screen.findByLabelText('How many days?')).toHaveValue(
+      String(MAX_DURATION_DAYS + 235),
+    )
+    expect(
+      screen.getByText(`Choose between ${MIN_DURATION_DAYS} and ${MAX_DURATION_DAYS} days.`),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled()
+  })
+
+  it('shows the stored preset as pressed when the user comes back', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+    await user.click(screen.getByRole('button', { name: '45 days' }))
+    unmount()
+
+    renderOnboarding({ startAt: STEP_URLS.duration })
+
+    expect(await screen.findByRole('button', { name: '45 days' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('Back goes to the WHY with the reason still written down', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(storedPhase2BDraft(), STEP_URLS.duration)
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByLabelText(WHY_QUESTION)).toHaveValue('Because I can')
+  })
+})
+
+describe('the milestones question', () => {
+  it('asks the question with its one line of supporting copy', async () => {
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Add a few real outcomes you can point to along the way.'),
+    ).toBeInTheDocument()
+  })
+
+  it('uses no game, technical or productivity jargon', async () => {
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    const text = document.body.textContent ?? ''
+    for (const pattern of BANNED_WORDS) {
+      expect(text, `unexpected jargon matching ${pattern}`).not.toMatch(pattern)
+    }
+  })
+
+  it('holds Continue until there is something to point at, and shows the reason', async () => {
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled()
+    expect(
+      screen.getByText('Add at least one thing that would prove it is working.'),
+    ).toBeInTheDocument()
+  })
+
+  it('adds one, records it, and announces it', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await submitMilestone(user, 'Run 5 km')
+
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
+    expect(screen.getByText('Run 5 km')).toBeInTheDocument()
+    expect(screen.getByText('1 so far')).toBeInTheDocument()
+    expect(storedMilestones()).toHaveLength(1)
+    expect(storedMilestones()[0]?.text).toBe('Run 5 km')
+    expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled()
+  })
+
+  it('trims the outer whitespace of what it stores', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await submitMilestone(user, '   Run 5 km   ')
+
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
+    expect(storedMilestones()[0]?.text).toBe('Run 5 km')
+  })
+
+  it('changes the wording of a milestone and NOTHING else', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        milestones: [{ id: 'ms_keepthisid0001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    const idBefore = storedMilestones()[0]?.id
+
+    await user.click(screen.getByRole('button', { name: 'Change “Run 5 km”' }))
+    await submitMilestone(user, 'Run a half marathon', { editing: true })
+
+    expect(await screen.findByText('Saved. Your wording was kept.')).toBeInTheDocument()
+    expect(storedMilestones()[0]?.id).toBe(idBefore)
+    expect(storedMilestones()[0]?.text).toBe('Run a half marathon')
+  })
+
+  it('returns focus to the row it just saved', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        milestones: [{ id: 'ms_keepthisid0001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    await user.click(screen.getByRole('button', { name: 'Change “Run 5 km”' }))
+    await submitMilestone(user, 'Run 10 km', { editing: true })
+
+    expect(await screen.findByRole('button', { name: 'Change “Run 10 km”' })).toHaveFocus()
+  })
+
+  it('removes one, and announces it', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        milestones: [
+          { id: 'ms_first0000000001', text: 'Run 5 km' },
+          { id: 'ms_second000000002', text: 'Buy new shoes' },
+        ],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    await user.click(screen.getByRole('button', { name: 'Remove “Run 5 km”' }))
+
+    expect(await screen.findByText('Removed.')).toBeInTheDocument()
+    expect(screen.queryByText('Run 5 km')).not.toBeInTheDocument()
+    expect(storedMilestones()).toEqual([{ id: 'ms_second000000002', text: 'Buy new shoes' }])
+  })
+
+  it('deletes the key, rather than leaving an empty list, when the last one goes', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        milestones: [{ id: 'ms_first0000000001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    await user.click(screen.getByRole('button', { name: 'Remove “Run 5 km”' }))
+
+    await waitFor(() => expect(readStoredDraft()).not.toHaveProperty('milestones'))
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled()
+  })
+
+  it('refuses a blank box and keeps the composer open', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: /add a milestone/i }))
+    await user.click(screen.getByRole('button', { name: /^add it$/i }))
+
+    expect(await screen.findByText('Type what you want to prove.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Add a milestone')).toBeInTheDocument()
+    expect(readStoredDraft()?.milestones).toBeUndefined()
+  })
+
+  it('refuses a box holding only whitespace', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await submitMilestone(user, '     ')
+
+    expect(await screen.findByText('Type what you want to prove.')).toBeInTheDocument()
+    expect(readStoredDraft()?.milestones).toBeUndefined()
+  })
+
+  it('refuses a sentence that is already on the list', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        milestones: [{ id: 'ms_first0000000001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    await submitMilestone(user, 'run 5km!')
+
+    expect(await screen.findByText('You already wrote that one.')).toBeInTheDocument()
+    expect(storedMilestones()).toHaveLength(1)
+  })
+
+  it('accepts one at exactly the length limit and refuses one over it', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    const atLimit = 'a'.repeat(MAX_MILESTONE_LENGTH)
+    await submitMilestone(user, atLimit)
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
+    expect(storedMilestones()[0]?.text).toBe(atLimit)
+
+    await submitMilestone(user, 'b'.repeat(MAX_MILESTONE_LENGTH + 1))
+    expect(
+      await screen.findByText(`Keep it to ${MAX_MILESTONE_LENGTH} letters or fewer.`),
+    ).toBeInTheDocument()
+    expect(storedMilestones()).toHaveLength(1)
+  })
+
+  it('keeps Unicode and emoji exactly as written', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await submitMilestone(user, '🎹 play for my mum 妈妈')
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
+
+    // Two different emoji are two different milestones, not a duplicate.
+    await submitMilestone(user, '🥁')
+    await waitFor(() => expect(storedMilestones()).toHaveLength(2))
+
+    expect(storedMilestones()[0]?.text).toBe('🎹 play for my mum 妈妈')
+    expect(storedMilestones()[1]?.text).toBe('🥁')
+  })
+
+  it('allows exactly five, then replaces the add control with a limit note', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    for (let index = 0; index < MAX_MILESTONES; index += 1) {
+      await submitMilestone(user, `Milestone ${index}`)
+      await waitFor(() => expect(storedMilestones()).toHaveLength(index + 1))
+    }
+
+    expect(screen.queryByRole('button', { name: /add a milestone/i })).not.toBeInTheDocument()
+    expect(
+      screen.getByText(`That is ${MAX_MILESTONES} — remove one to add another.`),
+    ).toBeInTheDocument()
+    expect(screen.getByText(`— that is the most you can add.`, { exact: false })).toBeInTheDocument()
+    expect(storedMilestones()).toHaveLength(MAX_MILESTONES)
+  })
+
+  it('keeps every milestone through a refresh', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderOnboarding({ startAt: STEP_URLS.milestones })
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await submitMilestone(user, 'Run 5 km')
+    await submitMilestone(user, 'Buy new shoes')
+
+    const before = window.localStorage.getItem(ASCEND_ONBOARDING_DRAFT_KEY)
+    unmount()
+    renderOnboarding({ startAt: STEP_URLS.milestones })
+
+    expect(await screen.findByText('Run 5 km')).toBeInTheDocument()
+    expect(screen.getByText('Buy new shoes')).toBeInTheDocument()
+    expect(window.localStorage.getItem(ASCEND_ONBOARDING_DRAFT_KEY)).toBe(before)
+  })
+
+  it('continues to the Daily Effort question', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        milestones: [{ id: 'ms_first0000000001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION }),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('daily-effort')
+  })
+
+  it('Back goes to the Duration question with the answer still pressed', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'milestones',
+        durationDays: 60,
+        milestones: [{ id: 'ms_first0000000001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.milestones,
+    )
+    await screen.findByText('Run 5 km')
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '60 days' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+})
+
+describe('the daily effort question', () => {
+  it('asks how much time can REALISTICALLY be given, in the user’s own voice', async () => {
+    renderOnboarding({ startAt: STEP_URLS.effort })
+
+    expect(await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })).toBeInTheDocument()
+    expect(screen.getByText(/think about a normal day, not a perfect one/i)).toBeInTheDocument()
+
+    for (const minutes of [10, 20, 30, 45, 60, 90]) {
+      expect(screen.getByRole('button', { name: `${minutes} minutes` })).toBeInTheDocument()
+    }
+  })
+
+  it('uses no game, technical or productivity jargon', async () => {
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    const text = document.body.textContent ?? ''
+    for (const pattern of BANNED_WORDS) {
+      expect(text, `unexpected jargon matching ${pattern}`).not.toMatch(pattern)
+    }
+  })
+
+  it('holds Continue until something is chosen', async () => {
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled()
+    expect(screen.getByText('Choose how many minutes you want.')).toBeInTheDocument()
+  })
+
+  it('records a preset and then states the boundary of this build honestly', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: '20 minutes' }))
+    expect(readStoredDraft()?.dailyEffortMinutes).toBe(20)
+
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('summary')
+
+    // No Journey, no Day 1, no Growth Points. The only thing Continue did was
+    // record the answer and move the pointer.
+    const stored = readStoredDraft() ?? {}
+    expect(Object.keys(stored).sort()).toEqual(
+      [
+        'currentStep',
+        'customGrowthAreas',
+        'dailyEffortMinutes',
+        'schemaVersion',
+        'selectedGrowthAreaIds',
+        'startedAt',
+        'updatedAt',
+      ].sort(),
+    )
+  })
+
+  it('"Change my answer" brings the Continue button back', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: '20 minutes' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByText(/not built yet/i)
+
+    await user.click(screen.getByRole('button', { name: /change my answer/i }))
+
+    expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '20 minutes' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('records a custom whole number of minutes inside the range', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+    await user.type(screen.getByLabelText('How many minutes?'), '25')
+    await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+    expect(readStoredDraft()?.dailyEffortMinutes).toBe(25)
+    expect(await screen.findByText('25 minutes. You can change this later.')).toBeInTheDocument()
+  })
+
+  it('refuses a custom value outside 5 to 480 minutes', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: 'Something else' }))
+
+    for (const value of [MIN_DAILY_EFFORT_MINUTES - 1, MAX_DAILY_EFFORT_MINUTES + 1]) {
+      const field = screen.getByLabelText('How many minutes?')
+      await user.clear(field)
+      await user.type(field, String(value))
+      await user.click(screen.getByRole('button', { name: /^use this$/i }))
+
+      expect(
+        await screen.findByText(
+          `Choose between ${MIN_DAILY_EFFORT_MINUTES} and ${MAX_DAILY_EFFORT_MINUTES} minutes.`,
+        ),
+      ).toBeInTheDocument()
+      expect(readStoredDraft()?.dailyEffortMinutes).toBeUndefined()
+    }
+  })
+
+  it('Back goes to the Milestones question with the list still there', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'daily-effort',
+        durationDays: 30,
+        milestones: [{ id: 'ms_first0000000001', text: 'Run 5 km' }],
+      }),
+      STEP_URLS.effort,
+    )
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Run 5 km')).toBeInTheDocument()
+  })
+})
+
+describe('moving through the three new steps', () => {
+  it('goes WHY to Duration to Milestones to Effort, and all the way back again', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: STEP_URLS.why })
+
+    await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('duration')
+
+    await user.click(screen.getByRole('button', { name: '45 days' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION }),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('milestones')
+
+    await submitMilestone(user, 'Run 5 km')
+    await screen.findByText('Added.')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION }),
+    ).toBeInTheDocument()
+    expect(readStoredDraft()?.currentStep).toBe('daily-effort')
+
+    await user.click(screen.getByRole('button', { name: '20 minutes' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+
+    // Back, one screen at a time, with every answer still in place.
+    await user.click(screen.getByRole('button', { name: /change my answer/i }))
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Run 5 km')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '45 days' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
+
+    expect(await screen.findByLabelText(WHY_QUESTION)).toHaveValue('Because I can')
+  })
+
+  it('cold-loads each new URL with the answers already on it', async () => {
+    const user = userEvent.setup()
+    const first = renderOnboarding({ startAt: STEP_URLS.why })
+
+    await user.type(await screen.findByLabelText(WHY_QUESTION), 'Because I can')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await user.click(await screen.findByRole('button', { name: '45 days' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+    await submitMilestone(user, 'Run 5 km')
+    await screen.findByText('Added.')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+    await user.click(screen.getByRole('button', { name: '20 minutes' }))
+
+    first.unmount()
+
+    const duration = renderOnboarding({ startAt: STEP_URLS.duration })
+    expect(await screen.findByRole('button', { name: '45 days' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    duration.unmount()
+
+    const milestones = renderOnboarding({ startAt: STEP_URLS.milestones })
+    expect(await screen.findByText('Run 5 km')).toBeInTheDocument()
+    milestones.unmount()
+
+    renderOnboarding({ startAt: STEP_URLS.effort })
+    expect(await screen.findByRole('button', { name: '20 minutes' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('follows the browser Back and Forward buttons through the new steps', async () => {
+    const user = userEvent.setup()
+    const { router } = renderOnboarding({ startAt: STEP_URLS.duration })
+    await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: '30 days' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION })
+
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(
+      await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '30 days' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    await act(async () => {
+      await router.navigate(1)
+    })
+    expect(
+      await screen.findByRole('heading', { level: 1, name: MILESTONES_QUESTION }),
+    ).toBeInTheDocument()
+  })
+
+  it('keeps a typed milestone on screen when storage is unavailable', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ repository: noStore(), startAt: STEP_URLS.milestones })
+
+    expect(await screen.findByText(/not letting ASCEND save/i)).toBeInTheDocument()
+
+    await submitMilestone(user, 'Run 5 km')
+
+    expect(await screen.findByText('Added.')).toBeInTheDocument()
+    expect(screen.getByText('Run 5 km')).toBeInTheDocument()
+    expect(readStoredDraft()).toBeNull()
+  })
+
+  it('creates no Journey and reaches no screen past Effort', async () => {
+    const user = userEvent.setup()
+    renderWithStoredDraft(
+      storedPhase2BDraft({
+        currentStep: 'daily-effort',
+        durationDays: 30,
+        milestones: [{ id: 'ms_first0000000001', text: 'Run 5 km' }],
+        dailyEffortMinutes: 20,
+      }),
+      STEP_URLS.effort,
+    )
+    await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
+
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await screen.findByText(/not built yet/i)
+
+    // The word this app must not use yet, and the data it must not invent.
+    expect(document.body.textContent ?? '').not.toMatch(/day 1/i)
+    expect(readStoredDraft()).not.toHaveProperty('journey')
+    expect(readStoredDraft()).not.toHaveProperty('journeyId')
+    expect(readStoredDraft()).not.toHaveProperty('growthPoints')
   })
 })
 

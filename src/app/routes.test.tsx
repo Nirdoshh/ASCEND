@@ -48,11 +48,17 @@ describe('routes', () => {
      */
     { path: '/onboarding', heading: 'Become the person you want to be.' },
     { path: '/onboarding/areas', heading: 'What do you want to improve?' },
-    // The two Phase 2B URLs. A cold load of either must render the
-    // question, because somebody can bookmark, refresh or share them —
-    // and a route that only works when reached by clicking is not a route.
+    // The Phase 2B and 2C URLs. A cold load of any of them must render the
+    // question, because somebody can bookmark, refresh or share them — and
+    // a route that only works when reached by clicking is not a route.
     { path: '/onboarding/goal', heading: 'What would you love to achieve?' },
     { path: '/onboarding/why', heading: 'Why does this matter to you?' },
+    { path: '/onboarding/duration', heading: 'How long do you want to work toward this?' },
+    { path: '/onboarding/milestones', heading: 'What would prove you’re making progress?' },
+    {
+      path: '/onboarding/effort',
+      heading: 'How much time can you realistically give this each day?',
+    },
   ] as const
 
   for (const { path, heading } of cases) {

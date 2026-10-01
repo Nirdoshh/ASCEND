@@ -13,14 +13,21 @@ import {
 } from '../../domain/growthAreas'
 import {
   addCustomGrowthArea,
+  addMilestone as addMilestoneIn,
   completeStep,
   createOnboardingDraft,
+  editMilestone as editMilestoneIn,
   knownGrowthAreas,
   reconcileSelections,
+  removeMilestone as removeMilestoneIn,
+  setDailyEffortMinutes as setDailyEffortIn,
+  setDurationDays as setDurationIn,
   setGoal as setGoalIn,
   setWhy as setWhyIn,
   toggleGrowthArea as toggleGrowthAreaIn,
+  type MilestoneWriteResult,
 } from '../../domain/onboardingDraft'
+import { createMilestoneId } from '../../domain/milestone'
 import type { OnboardingDraft, OnboardingStep } from '../../domain/onboardingDraft'
 
 /**
@@ -61,6 +68,35 @@ export interface OnboardingContextValue {
   setGoal(raw: string): void
   /** The WHY. Same reasoning, same rules, same cost. */
   setWhy(raw: string): void
+  /**
+   * Records the Duration, in days.
+   *
+   * NOT per-keystroke, unlike the Goal and the WHY, and the difference is
+   * the widget rather than the principle. A preset chip is a COMMITTED
+   * answer the moment it is pressed, so there is no half-typed sentence to
+   * lose. The custom number field is the exception: it commits on submit,
+   * which is why the field keeps its own draft text in local state until
+   * the user actually submits it.
+   *
+   * A number that is not a positive whole number DELETES the answer rather
+   * than storing it. Zero is not a short duration; see schedule.ts.
+   */
+  setDuration(days: number): void
+  /** The Daily Effort, in minutes. Same rules, same absence rule. */
+  setEffort(minutes: number): void
+  /**
+   * Adds a milestone, or explains why it was refused.
+   *
+   * Returns the result rather than throwing, because every refusal here is
+   * an ordinary thing a person does — a blank box, a sentence already on
+   * the list — and the screen's job is to say which one it was next to the
+   * field they typed it in.
+   */
+  addMilestone(raw: string): MilestoneWriteResult
+  /** Changes a milestone's text. The id is read, never written. */
+  editMilestone(id: string, raw: string): MilestoneWriteResult
+  /** Removes a milestone. Removing the last one leaves the question unanswered. */
+  removeMilestone(id: string): void
   advanceFrom(step: OnboardingStep): void
 }
 
@@ -186,6 +222,83 @@ export function OnboardingDraftProvider({
     [apply, now],
   )
 
+  const setDuration = useCallback(
+    (days: number) => {
+      apply((current) => setDurationIn(current, days, now()))
+    },
+    [apply, now],
+  )
+
+  const setEffort = useCallback(
+    (minutes: number) => {
+      apply((current) => setDailyEffortIn(current, minutes, now()))
+    },
+    [apply, now],
+  )
+
+  /**
+   * Adds a milestone.
+   *
+   * Two calls to the same pure function, and the duplication is the point.
+   *
+   * The FIRST validates against the draft the user is looking at, so the
+   * message they get matches the list in front of them. The SECOND runs
+   * against whatever React state actually holds when the update is applied,
+   * so a state update still in flight cannot be clobbered by returning the
+   * first call's draft directly. `createCustomArea` above splits the same
+   * way for the same reason.
+   *
+   * The ID IS MINTED HERE, ONCE, BEFORE EITHER CALL. That
+   * is what makes it stable: the domain never generates one, so the two
+   * calls cannot mint two different ids for the same milestone, and the
+   * retry-on-commit above cannot produce a different result from the one
+   * the user was told about.
+   */
+  const addMilestone = useCallback(
+    (raw: string): MilestoneWriteResult => {
+      const base = draft ?? startDraft()
+      const id = createMilestoneId()
+      const result = addMilestoneIn(base, id, raw, now())
+
+      if (result.ok) {
+        apply((current) => {
+          const applied = addMilestoneIn(current, id, raw, now())
+          // The second call can only fail if the world moved underneath the
+          // user — a second tab, say. Keeping `current` unchanged is the
+          // honest outcome: nothing was silently dropped or reordered.
+          return applied.ok ? applied.draft : current
+        })
+      }
+
+      return result
+    },
+    [apply, draft, now],
+  )
+
+  const editMilestone = useCallback(
+    (id: string, raw: string): MilestoneWriteResult => {
+      const base = draft ?? startDraft()
+      const result = editMilestoneIn(base, id, raw, now())
+
+      if (result.ok) {
+        apply((current) => {
+          const applied = editMilestoneIn(current, id, raw, now())
+          return applied.ok ? applied.draft : current
+        })
+      }
+
+      return result
+    },
+    [apply, draft, now],
+  )
+
+  const removeMilestone = useCallback(
+    (id: string) => {
+      apply((current) => removeMilestoneIn(current, id, now()))
+    },
+    [apply, now],
+  )
+
   const advanceFrom = useCallback(
     (step: OnboardingStep) => {
       apply((current) => completeStep(current, step, now()))
@@ -212,9 +325,28 @@ export function OnboardingDraftProvider({
       createCustomArea,
       setGoal,
       setWhy,
+      setDuration,
+      setEffort,
+      addMilestone,
+      editMilestone,
+      removeMilestone,
       advanceFrom,
     }
-  }, [draft, storageStatus, begin, toggleArea, createCustomArea, setGoal, setWhy, advanceFrom])
+  }, [
+    draft,
+    storageStatus,
+    begin,
+    toggleArea,
+    createCustomArea,
+    setGoal,
+    setWhy,
+    setDuration,
+    setEffort,
+    addMilestone,
+    editMilestone,
+    removeMilestone,
+    advanceFrom,
+  ])
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>
 }

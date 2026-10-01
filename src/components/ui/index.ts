@@ -9,6 +9,7 @@
 
 export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button'
 export { Card, type CardProps, type CardTone } from './Card'
+export { ChoiceChip, type ChoiceChipProps } from './ChoiceChip'
 export { TextField, TextAreaField, type TextFieldProps, type TextAreaFieldProps } from './TextField'
 export { ProgressBar, type ProgressBarProps, type ProgressTone } from './ProgressBar'
 export { Icon, type IconName, type IconProps } from './Icon'

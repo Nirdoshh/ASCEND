@@ -24,3 +24,8 @@ Thumbs.db
 
 # test output
 coverage/
+
+# Playwright/browser verification output (screenshots, traces, snapshots).
+# These are produced by verification runs, never part of the app.
+.playwright-mcp/
+verify/

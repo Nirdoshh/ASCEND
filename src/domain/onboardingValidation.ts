@@ -48,10 +48,16 @@
  * concern and it reuses the same function, so it cannot disagree.
  */
 
+import { MAX_MILESTONES, MIN_MILESTONES } from './milestone'
 import { knownGrowthAreas, ONBOARDING_STEPS } from './onboardingDraft'
 import type { OnboardingDraft, OnboardingStep } from './onboardingDraft'
 import { MAX_GOAL_LENGTH, MAX_WHY_LENGTH } from './personalAnswer'
 import type { PersonalAnswer } from './personalAnswer'
+import {
+  DAILY_EFFORT_BOUNDS,
+  DURATION_BOUNDS,
+  isBoundedNumberInRange,
+} from './schedule'
 
 /**
  * Why a step is not satisfied.
@@ -79,6 +85,20 @@ export type OnboardingProblem =
   | 'not-answered-yet'
   | 'unresolvable'
   | 'too-long'
+  /**
+   * A number was stored that this build cannot honour.
+   *
+   * Its own name rather than a reuse of `too-long`, because "too long" is
+   * false for a 3-day Journey and "unanswered" is false for a 3-day Journey
+   * somebody typed on purpose. Both of those would leave them retyping an
+   * answer they had already given correctly, which is the exact failure
+   * `too-long` exists to avoid.
+   *
+   * Reachable only from hand-edited storage or a build with different
+   * bounds: our own screens refuse an out-of-range number before it is ever
+   * stored. See schedule.ts.
+   */
+  | 'out-of-range'
 
 export type StepValidation =
   | { readonly valid: true }
@@ -187,6 +207,126 @@ function validateAnswer(
 }
 
 /**
+ * The shared rule behind both numeric steps.
+ *
+ * The same reasoning as `validateAnswer` above: the two differences that
+ * matter — the range, and what to say when the number is unusable — are the
+ * caller's to supply, and everything else is identical. Duration in days and
+ * daily effort in minutes are the same question asked about different units.
+ *
+ * Three outcomes, and the distinction between the last two is the whole
+ * point of this function:
+ *
+ *   no number at all        unanswered. The user has not been asked, or has
+ *                           not answered, and saying so is the truth.
+ *   a number we cannot use  out-of-range. The user HAS given a number and it
+ *                           is a real one; we simply cannot honour it. They
+ *                           are told the range and asked to pick again, which
+ *                           is a different conversation from "you have not
+ *                           answered yet".
+ *   a usable number         valid.
+ *
+ * The message for `out-of-range` is built from the bounds rather than typed,
+ * so it cannot go stale if a limit is ever moved.
+ */
+function validateBoundedNumber(
+  value: number | undefined,
+  bounds: { min: number; max: number; unit: string },
+): StepValidation {
+  if (value === undefined) {
+    return {
+      valid: false,
+      problem: 'unanswered',
+      message: `Choose how many ${bounds.unit} you want.`,
+    }
+  }
+
+  if (!isBoundedNumberInRange(value, bounds)) {
+    return {
+      valid: false,
+      problem: 'out-of-range',
+      message: `Choose between ${bounds.min} and ${bounds.max} ${bounds.unit}.`,
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Step 5 is satisfied when the user has chosen a duration inside the bounds.
+ *
+ * Not checked, on purpose: whether the number is achievable, whether it
+ * suits their Goal, whether it is "enough" time. A person who answers "7"
+ * has answered the question. Second-guessing a number is the same mistake as
+ * second-guessing a sentence, and the brief is explicit that daily effort is
+ * planning context rather than a score — so this validator has no opinion
+ * about the value, only about whether it is one we can store and use.
+ *
+ * Nothing here compares duration against daily effort. 90 days at 10 minutes
+ * and 30 days at 90 minutes are both valid, because judging one against the
+ * other is exactly the judgement this phase refuses to make.
+ */
+export function isDurationStepValid(draft: OnboardingDraft | null): StepValidation {
+  return validateBoundedNumber(draft?.durationDays, DURATION_BOUNDS)
+}
+
+/**
+ * Step 7 is satisfied the same way, in minutes.
+ *
+ * The word "realistically" is in the question, so the screen's copy is the
+ * place that carries it. The validator deliberately has no view on whether
+ * the number was realistic: telling somebody their honest answer is too
+ * small would be the exact shaming the brief rules out, and it is not
+ * something a number can tell us anyway.
+ */
+export function isEffortStepValid(draft: OnboardingDraft | null): StepValidation {
+  return validateBoundedNumber(draft?.dailyEffortMinutes, DAILY_EFFORT_BOUNDS)
+}
+
+/**
+ * Step 6 is satisfied when at least one milestone is written and no more
+ * than MAX_MILESTONES are.
+ *
+ * The LOWER bound is `unanswered` — no milestones means the question has not
+ * been answered. That is only true because `removeMilestone` DELETES the key
+ * when the last one goes; a stored `milestones: []` would claim otherwise,
+ * and the rule would have to bend to accommodate it.
+ *
+ * The UPPER bound is a real refusal rather than a silent truncation. Eight
+ * stored milestones cannot come from our own screens — `addMilestone`
+ * refuses the ninth — so this is hand-edited storage, and four of those
+ * eight are sentences somebody typed. Truncating them would delete real
+ * work; refusing the step tells them to combine two, which is the advice the
+ * limit exists to give.
+ *
+ * Deliberately NOT checked: what a milestone says, whether it is specific
+ * enough, whether it is reachable, and which Growth Area it belongs to.
+ * Milestones are Journey-level in V1 (ADR 0010), so there is no area to
+ * resolve against, and ASCEND does not grade what people write.
+ */
+export function isMilestoneStepValid(draft: OnboardingDraft | null): StepValidation {
+  const count = draft?.milestones?.length ?? 0
+
+  if (count < MIN_MILESTONES) {
+    return {
+      valid: false,
+      problem: 'unanswered',
+      message: 'Add at least one thing that would prove it is working.',
+    }
+  }
+
+  if (count > MAX_MILESTONES) {
+    return {
+      valid: false,
+      problem: 'too-long',
+      message: `Keep it to ${MAX_MILESTONES} or fewer — try to combine two.`,
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
  * One validator per step, keyed by step.
  *
  * Only the steps that exist have entries. Adding a screen in a later
@@ -198,13 +338,27 @@ function validateAnswer(
  *   isGrowthAreaStepValid  implemented
  *   isGoalStepValid        implemented
  *   isWhyStepValid         implemented
- *   isDurationStepValid    Phase 2C
- *   isMilestoneStepValid   Phase 2C
- *   isEffortStepValid      Phase 2C
+ *   isDurationStepValid    implemented
+ *   isMilestoneStepValid   implemented
+ *   isEffortStepValid      implemented
  *
  * Note there is no validator for `welcome`: the welcome screen asks
  * nothing, so there is nothing to validate, and it is excluded from the
  * scan below.
+ *
+ * AND NO VALIDATOR FOR `summary`
+ *
+ * `summary` is the step that creates the Journey, so it is deliberately
+ * still absent. `validateOnboardingDraft` therefore CANNOT return
+ * `valid: true` in Phase 2C even for a draft where every question has been
+ * answered perfectly: the scan reaches `summary`, finds no rule, and stops
+ * with `not-answered-yet`.
+ *
+ * That is the strongest statement this codebase can make that Phase 2D
+ * owns the transition. It would have been easy — and wrong — to register a
+ * placeholder that returned `valid: true` so the gate would open. Onboarding
+ * would then be "complete" with no Journey having been created, and Phase
+ * 2D would inherit a gate that has already been satisfied by nobody.
  */
 export type StepValidator = (draft: OnboardingDraft) => StepValidation
 
@@ -215,6 +369,9 @@ const STEP_VALIDATORS: StepValidators = {
   'growth-areas': isGrowthAreaStepValid,
   goal: isGoalStepValid,
   why: isWhyStepValid,
+  duration: isDurationStepValid,
+  milestones: isMilestoneStepValid,
+  'daily-effort': isEffortStepValid,
 }
 
 export type OnboardingValidation =
@@ -232,16 +389,27 @@ export type OnboardingValidation =
  *
  * Walks the steps in order and stops at the first one that is not
  * satisfied, so the message always names the earliest thing still
- * missing. Through Phase 2B that is always `duration`, because no
- * duration screen exists yet — which is the correct, honest answer, and a
- * standing demonstration that a draft sitting on `currentStep: 'summary'`
- * is not treated as complete.
+ * missing.
  *
- * Phase 2B did NOT weaken this gate to make itself look finished. Adding
- * two validators moved the stopping point forward by two steps and
- * nothing else: there is still no way to produce a `valid: true` result
- * from this build, and that is the correct state until every step has a
- * screen.
+ * WHERE IT STOPS, AND WHY THAT IS THE POINT
+ *
+ * Through Phase 2B that was always `duration`, because no duration screen
+ * existed. Through Phase 2C it is always `summary`, because Phase 2C built
+ * the duration, milestone and daily-effort questions and deliberately did
+ * NOT build the step that creates a Journey.
+ *
+ * So this build still cannot return `valid: true`, and the reason is a
+ * design decision rather than an oversight: the moment onboarding claims a
+ * completed draft, something downstream is entitled to create a Journey, and
+ * that something is Phase 2D's to write. A placeholder validator that
+ * returned `valid: true` for `summary` would have made this gate open
+ * without a Journey existing, and the test that asserts the gate is closed
+ * would have been the thing standing between the two phases and a Journey
+ * built from a draft with nothing behind it.
+ *
+ * Phase 2B and Phase 2C each did NOT weaken this gate to make themselves
+ * look finished. Adding validators moved the stopping point forward and
+ * nothing else.
  *
  * The `validators` argument is a seam, not a feature. It exists so the
  * success path and the mid-list failure path can be tested before those

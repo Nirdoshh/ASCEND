@@ -9,12 +9,14 @@ more meaningful action in real life.
 
 ## Status
 
-Phase 2B complete: onboarding asks for Growth Areas, a Goal and a WHY.
+Phase 2C complete: onboarding asks for Growth Areas, a Goal, a WHY, a Duration, a
+few Milestones and a realistic Daily Effort.
 
-Not yet built: the duration, milestone, daily-effort and summary steps, Today's
-plan, completion, scoring, Journey, Progress, Daily Review, Recovery. The four
-main screens exist with honest empty states rather than fake data, and onboarding
-stops and says so plainly rather than pretending the plan is finished.
+Not yet built: the summary step and the act of creating a Journey, Today's plan,
+completion, scoring, Journey, Progress, Daily Review, Recovery. The four main
+screens exist with honest empty states rather than fake data, and onboarding stops
+at the Daily Effort question and says so plainly rather than pretending the plan
+is finished.
 
 | Phase | Scope | State |
 |---|---|---|
@@ -22,7 +24,8 @@ stops and says so plainly rather than pretending the plan is finished.
 | 1 | Shell, design system, responsive, a11y base, Cloudflare plumbing | **Done** |
 | 2A | Onboarding: welcome + Growth Areas | **Done** |
 | 2B | Onboarding: Goal + WHY | **Done** |
-| 2C | Onboarding: duration, milestones, daily effort, summary, Journey creation | Not started |
+| 2C | Onboarding: duration, milestones, daily effort | **Done** |
+| 2D | Onboarding: summary + Journey creation | Not started |
 | 3 | Today system | Not started |
 
 ## Requirements
@@ -136,7 +139,9 @@ docs/adr/                0001 Cloudflare Worker, 0002 repository interfaces,
                          0008 currentStep is navigation only,
                          0009 unresolved references are kept, not deleted,
                          0010 the Goal and the WHY are Journey-level,
-                         0011 a draft from a newer build is never overwritten
+                         0011 a draft from a newer build is never overwritten,
+                         0012 every persisted field needs a version bump and a
+                              sequential migration
 ```
 
 ## Design system

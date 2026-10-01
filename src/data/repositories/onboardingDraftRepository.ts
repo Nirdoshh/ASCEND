@@ -28,7 +28,10 @@ import {
   suggestedGrowthAreaId,
 } from '../../domain/growthAreaId'
 import { normalizeGrowthAreaName, toGrowthAreaDisplayName } from '../../domain/growthAreaName'
+import { normalizeMilestone, normalizeMilestoneText } from '../../domain/milestone'
+import type { DraftMilestone } from '../../domain/milestone'
 import { normalizePersonalAnswer } from '../../domain/personalAnswer'
+import { normalizeStoredCount } from '../../domain/schedule'
 import {
   normalizeDraftGrowthArea,
   ONBOARDING_SCHEMA_VERSION,
@@ -66,17 +69,23 @@ export interface OnboardingDraftRepository {
 /**
  * Upgrades an older draft to the current shape.
  *
- *
  * Keyed by the version being upgraded FROM, and applied in order, so a
- * v1 draft reaching a v4 build walks 1 -> 2 -> 3 -> 4. Registering the
+ * v1 draft reaching a v5 build walks 1 -> 2 -> 3 -> 4 -> 5. Registering the
  * mechanism while there are only two versions is what makes it possible to
  * change the stored shape later without throwing away what a user typed —
  * and throwing away a user's typing is the worst thing this app could do.
+ *
+ * Every version below the current one MUST have an entry. A missing step is
+ * treated as "this draft cannot be reconstructed" and the whole draft is
+ * dropped, so a gap does not degrade gracefully — it sends that user back to
+ * the welcome screen. A test walks every version from 1 to the current one
+ * and asserts an entry exists.
  */
 export const ONBOARDING_DRAFT_MIGRATIONS: Record<number, (value: unknown) => unknown> = {
   1: migrateDraftV1ToV2,
   2: migrateDraftV2ToV3,
   3: migrateDraftV3ToV4,
+  4: migrateDraftV4ToV5,
 }
 
 /**
@@ -294,6 +303,53 @@ export function migrateDraftV3ToV4(value: unknown): unknown {
   return value
 }
 
+/**
+ * v4 -> v5: the draft gains a Duration, Milestones and a Daily Effort.
+ *
+ * A pass-through for the same reason v3 -> v4 is: all three fields are
+ * OPTIONAL, so "unanswered" already has a correct v5 representation — the
+ * key being absent — and every v4 draft has all three absent. There is no
+ * value to convert and no id to remap. A v4 draft that somehow already
+ * carries the three keys (the Phase 2C build, before this number was
+ * corrected) passes through to `normalizeFields`, which reads them normally.
+ *
+ * WHY THE BUMP IS MANDATORY RATHER THAN COSMETIC, WHICH IS THE WHOLE
+ * LESSON OF COMMIT b3c8a91
+ *
+ * The Phase 2B build added `goal` and `why` WITHOUT bumping, reasoning that
+ * an older build would simply ignore a key it had no name for. It does not,
+ * and it was measured rather than assumed: the v3 reader rebuilds a draft
+ * from the six keys it knows, inside `normalizeFields`, so the very next
+ * ordinary write — tapping a chip on the Growth Areas screen — produced a v3
+ * object with `goal` and `why` silently deleted. A user's typed sentence
+ * vanished on a routine interaction, with no error, no warning and no way to
+ * get it back.
+ *
+ * The loss is entirely at the READ boundary. The domain update is a plain
+ * spread and always was safe; what was not safe was a reader that CONSTRUCTS
+ * a known-key object rather than overlaying onto what was stored.
+ *
+ * So the rule this migration encodes is: any change to what a draft can hold
+ * is a version change, because some build is out there right now that will
+ * read this one and reconstruct a smaller object. That older build cannot be
+ * fixed — it is already shipped — so the only lever available is to make sure
+ * it REFUSES this draft rather than damaging it, which is exactly what the
+ * version number accomplishes. A build that sees version 5 when it only
+ * understands 4 returns null and shows the welcome screen, losing nothing;
+ * a build that saw a version-4 draft carrying v5 fields would quietly
+ * delete them.
+ *
+ * It still has to EXIST as a registered step: a version with no registered
+ * migration is treated as unreconstructable and the whole draft is dropped, so
+ * a gap at 4 would send every existing v4 user back to the welcome screen and
+ * lose their Goal and WHY outright. That is worse than either failure mode
+ * above, which is why the "has a migration for every version below the
+ * current one" test exists.
+ */
+export function migrateDraftV4ToV5(value: unknown): unknown {
+  return value
+}
+
 /** The single prefix v2 used for all three namespaces. */
 const V2_ID_PREFIX = 'ga_'
 
@@ -436,10 +492,25 @@ export function hasNewerSchema(raw: unknown): boolean {
  * because reconciliation can only recognise a selection once it knows
  * which areas exist.
  *
- * A draft written by an earlier build simply has no `goal` or `why` key,
- * which is the correct output here: absent is how this codebase spells
- * "not answered". See the note on ONBOARDING_SCHEMA_VERSION for why the
- * fields still earned a version bump.
+ * A draft written by an earlier build simply has no `goal`, `why`,
+ * `durationDays`, `milestones` or `dailyEffortMinutes` key, which is the
+ * correct output here: absent is how this codebase spells "not answered".
+ * See the note on ONBOARDING_SCHEMA_VERSION for why each group of fields
+ * still earned a version bump.
+ *
+ * THE REASON THIS FUNCTION REBUILDS FROM KNOWN KEYS, AND ITS ONE DANGER
+ *
+ * Constructing the object here rather than overlaying onto what was stored is
+ * deliberate: it is what makes a hand-edited or corrupt draft come out
+ * well-formed, and it is what makes the output independent of whatever extra
+ * keys some other build left lying around. But it is also precisely the shape
+ * that caused commit b3c8a91 — a reader that rebuilds a SMALLER object than
+ * the one it read will delete the difference on the next write.
+ *
+ * That is why every new persisted field is a schema version bump. This
+ * function cannot be made safe against a build that has not been written yet;
+ * the version number is the only protection, and `hasNewerSchema` checks it
+ * BEFORE a write. See migrateDraftV4ToV5.
  */
 function normalizeFields(value: object, now: string): OnboardingDraft {
   const candidate = value as Record<string, unknown>
@@ -448,6 +519,9 @@ function normalizeFields(value: object, now: string): OnboardingDraft {
   const customGrowthAreas = normalizeCustomAreas(candidate.customGrowthAreas)
   const goal = normalizePersonalAnswer(candidate.goal)
   const why = normalizePersonalAnswer(candidate.why)
+  const milestones = normalizeMilestones(candidate.milestones)
+  const durationDays = normalizeStoredCount(candidate.durationDays)
+  const dailyEffortMinutes = normalizeStoredCount(candidate.dailyEffortMinutes)
 
   const draft: OnboardingDraft = {
     schemaVersion: ONBOARDING_SCHEMA_VERSION,
@@ -462,6 +536,9 @@ function normalizeFields(value: object, now: string): OnboardingDraft {
     // representation in this codebase.
     ...(goal ? { goal } : {}),
     ...(why ? { why } : {}),
+    ...(milestones ? { milestones } : {}),
+    ...(durationDays === null ? {} : { durationDays }),
+    ...(dailyEffortMinutes === null ? {} : { dailyEffortMinutes }),
   }
 
   // Drop selections pointing at areas that no longer exist. Without
@@ -509,6 +586,55 @@ function normalizeCustomAreas(value: unknown): DraftGrowthArea[] {
   }
 
   return kept
+}
+
+/**
+ * Rebuilds a stored milestone list, or null when there is nothing usable.
+ *
+ * Returns null rather than `[]` so the caller spreads it conditionally and an
+ * empty result becomes an ABSENT key. A stored `milestones: []`, or a list
+ * where every entry was unusable, both correctly mean "this question has not
+ * been answered" — which is the one representation this codebase allows.
+ * Writing `milestones: []` instead would claim the user had answered with
+ * nothing, and would pass a step that asks "what would prove you're making
+ * progress?".
+ *
+ * Two repairs, both of DERIVED data rather than of somebody's sentence:
+ *
+ *   - a missing or blank id gets a deterministic one. `normalizeMilestone`
+ *     owns that, and does it by hashing so repairing the same draft twice
+ *     produces the same identity.
+ *   - a repeated id or repeated TEXT keeps the FIRST occurrence, which
+ *     preserves the spelling that was typed first. Two identical sentences
+ *     are a double tap, not two milestones. This is the same repair
+ *     `mergeGrowthAreas` makes for areas, for the same reason.
+ *
+ * THE COUNT IS NOT CAPPED. A stored list of eight is somebody's eight
+ * sentences, and truncating it would silently delete four of them — the
+ * exact failure mode this repository exists to prevent. The step validator
+ * refuses the step and tells the user to combine two instead, which keeps
+ * all eight on disk until they decide which to drop.
+ */
+function normalizeMilestones(value: unknown): readonly DraftMilestone[] | null {
+  if (!Array.isArray(value)) return null
+
+  const seenIds = new Set<string>()
+  const seenText = new Set<string>()
+  const kept: DraftMilestone[] = []
+
+  for (const entry of value) {
+    const milestone = normalizeMilestone(entry)
+    if (!milestone) continue
+
+    const comparison = normalizeMilestoneText(milestone.text)
+    if (seenIds.has(milestone.id) || seenText.has(comparison)) continue
+
+    seenIds.add(milestone.id)
+    seenText.add(comparison)
+    kept.push(milestone)
+  }
+
+  return kept.length === 0 ? null : kept
 }
 
 /**

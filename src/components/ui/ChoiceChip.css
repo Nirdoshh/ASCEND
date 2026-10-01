@@ -1,0 +1,77 @@
+/*
+ * Choice chip.
+ *
+ * A selectable option in a list of them. Layout only, and deliberately close
+ * to Button: same 44px target, same transition vocabulary, same token
+ * sources. Reusing the visual language is what makes a screen of chips read
+ * as part of the same app as the buttons beside them, rather than as a widget
+ * invented by whichever feature happened to need it first.
+ *
+ * Colour is never the only signal. Selection also shows a tick, so the state
+ * is legible in greyscale and in forced-colours mode.
+ *
+ * The radius is the one thing this deliberately does NOT share with Button.
+ * A chip is a pill and a button is a rounded rectangle, and that difference is
+ * what tells a user at a glance that three things on a screen are one choice
+ * while the thing below them is an action.
+ */
+
+.choice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+
+  /* Never below the WCAG 2.2 AA target size, same as every Button. */
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-4);
+
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background-color: var(--surface-raised);
+  color: var(--text-primary);
+
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-snug);
+  text-align: start;
+
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.choice-chip:hover {
+  background-color: var(--surface-sunken);
+}
+
+.choice-chip--selected {
+  background-color: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+}
+
+/*
+ * The tick column is always present, even when empty, so selecting a chip
+ * does not shift the labels sideways. Reserving the space up front is what
+ * stops the row jumping under the finger.
+ */
+.choice-chip__tick {
+  inline-size: 1em;
+  flex: none;
+  text-align: center;
+  font-weight: var(--weight-bold);
+}
+
+.choice-chip__label {
+  /* A long label wraps inside the chip rather than pushing the chip off a
+   * narrow phone screen. */
+  overflow-wrap: anywhere;
+}
+
+/* Long labels wrap inside the chip. max-inline-size stops one unbroken word
+ * from stretching a chip wider than the phone screen, which is what
+ * overflow-wrap alone cannot do. */
+.choice-chip {
+  max-inline-size: 100%;
+}

@@ -4,23 +4,31 @@ import { suggestedGrowthAreaId } from './growthAreaId'
 import { SUGGESTED_GROWTH_AREAS } from './growthAreas'
 import {
   addCustomGrowthArea,
+  addMilestone,
   completeStep,
   createOnboardingDraft,
   ONBOARDING_STEPS,
   selectGrowthArea,
+  setDailyEffortMinutes,
+  setDurationDays,
   setGoal,
   setWhy,
   type OnboardingDraft,
 } from './onboardingDraft'
 import {
   answeredSteps,
+  isDurationStepValid,
+  isEffortStepValid,
   isGoalStepValid,
   isGrowthAreaStepValid,
+  isMilestoneStepValid,
   isWhyStepValid,
   validateOnboardingDraft,
   type OnboardingProblem,
   type StepValidation,
 } from './onboardingValidation'
+import { DAILY_EFFORT_BOUNDS, DAILY_EFFORT_PRESET_MINUTES, DURATION_BOUNDS, DURATION_PRESET_DAYS } from './schedule'
+import { MAX_MILESTONES } from './milestone'
 import { MAX_GOAL_LENGTH, MAX_WHY_LENGTH } from './personalAnswer'
 
 const T0 = '2026-10-01T09:00:00.000Z'
@@ -48,6 +56,41 @@ function withGoal(draft: OnboardingDraft, text: string): OnboardingDraft {
 
 function withWhy(draft: OnboardingDraft, text: string): OnboardingDraft {
   return setWhy(draft, text, T0)
+}
+
+function withDuration(draft: OnboardingDraft, days: number): OnboardingDraft {
+  return setDurationDays(draft, days, T0)
+}
+
+function withMilestones(draft: OnboardingDraft, texts: readonly string[]): OnboardingDraft {
+  return texts.reduce(
+    (current, text, index) => {
+      const result = addMilestone(current, `ms_test_${index}`, text, T0)
+      if (!result.ok) throw new Error(`test milestone refused: ${result.message}`)
+      return result.draft
+    },
+    draft,
+  )
+}
+
+function withEffort(draft: OnboardingDraft, minutes: number): OnboardingDraft {
+  return setDailyEffortMinutes(draft, minutes, T0)
+}
+
+/**
+ * A draft where every question Phase 2C asks has been answered.
+ *
+ * Built through the real setters rather than by assigning fields, so it
+ * cannot describe a state the domain has no way to produce.
+ */
+function fullyAnswered(): OnboardingDraft {
+  return withEffort(
+    withMilestones(
+      withDuration(withWhy(withGoal(withFitness(), 'Run my first 10K'), 'Because I can'), 30),
+      ['Run 5 km without stopping'],
+    ),
+    20,
+  )
 }
 
 /** Force a field, to build drafts that no honest UI could produce. */
@@ -289,6 +332,212 @@ describe('isGoalStepValid and isWhyStepValid', () => {
   })
 })
 
+describe('isDurationStepValid and isEffortStepValid', () => {
+  // The two numeric steps share one rule set, exactly as the two free-text
+  // steps do, so the cases are written once and run against both. The only
+  // differences are the bounds, the wording and the field the answer lands in.
+  const steps = [
+    {
+      label: 'duration',
+      validate: isDurationStepValid,
+      write: withDuration,
+      bounds: DURATION_BOUNDS,
+      presets: DURATION_PRESET_DAYS,
+    },
+    {
+      label: 'effort',
+      validate: isEffortStepValid,
+      write: withEffort,
+      bounds: DAILY_EFFORT_BOUNDS,
+      presets: DAILY_EFFORT_PRESET_MINUTES,
+    },
+  ] as const
+
+  for (const step of steps) {
+    describe(`the ${step.label} step`, () => {
+      it('is not valid when there is no draft at all', () => {
+        expect(step.validate(null)).toEqual({
+          valid: false,
+          problem: 'unanswered',
+          message: `Choose how many ${step.bounds.unit} you want.`,
+        })
+      })
+
+      it('is not valid before the question is answered', () => {
+        expect(step.validate(createOnboardingDraft(T0))).toEqual({
+          valid: false,
+          problem: 'unanswered',
+          message: `Choose how many ${step.bounds.unit} you want.`,
+        })
+      })
+
+      it('is valid for any preset', () => {
+        for (const value of step.presets) {
+          expect(step.validate(step.write(createOnboardingDraft(T0), value)), String(value)).toEqual(
+            { valid: true },
+          )
+        }
+      })
+
+      it('is valid at exactly the minimum and exactly the maximum', () => {
+        expect(step.validate(step.write(createOnboardingDraft(T0), step.bounds.min))).toEqual({
+          valid: true,
+        })
+        expect(step.validate(step.write(createOnboardingDraft(T0), step.bounds.max))).toEqual({
+          valid: true,
+        })
+      })
+
+      it('is invalid — OUT OF RANGE, not unanswered — for a stored value below the minimum', () => {
+        // The distinction is the whole design. Our screens cannot store this,
+        // so it is hand-edited storage, and a number is there. Saying "choose
+        // how many" would tell the user they had not answered when the
+        // screen would be showing them a number.
+        const draft = withField(
+          createOnboardingDraft(T0),
+          step.label === 'duration' ? 'durationDays' : 'dailyEffortMinutes',
+          step.bounds.min - 1,
+        )
+
+        expect(step.validate(draft)).toEqual({
+          valid: false,
+          problem: 'out-of-range',
+          message: `Choose between ${step.bounds.min} and ${step.bounds.max} ${step.bounds.unit}.`,
+        })
+      })
+
+      it('is invalid — OUT OF RANGE — for a stored value above the maximum', () => {
+        const draft = withField(
+          createOnboardingDraft(T0),
+          step.label === 'duration' ? 'durationDays' : 'dailyEffortMinutes',
+          step.bounds.max + 1,
+        )
+
+        expect(step.validate(draft)).toEqual({
+          valid: false,
+          problem: 'out-of-range',
+          message: `Choose between ${step.bounds.min} and ${step.bounds.max} ${step.bounds.unit}.`,
+        })
+      })
+
+      it('does not treat an out-of-range value as answered-and-fine', () => {
+        // A regression guard with teeth: if the bounds check were dropped,
+        // every other test here would still pass.
+        const draft = withField(
+          createOnboardingDraft(T0),
+          step.label === 'duration' ? 'durationDays' : 'dailyEffortMinutes',
+          step.bounds.max * 100,
+        )
+
+        expect(step.validate(draft).valid).toBe(false)
+      })
+
+      it('ignores the step the user happens to be on', () => {
+        const draft = withField(
+          step.write(createOnboardingDraft(T0), step.bounds.min),
+          'currentStep',
+          'welcome',
+        )
+
+        expect(step.validate(draft)).toEqual({ valid: true })
+      })
+    })
+  }
+
+  it('never compares the Duration against the Daily Effort', () => {
+    // 90 days at 5 minutes and 7 days at 480 minutes are both legal. Judging
+    // one against the other is the exact judgement this phase refuses.
+    const shortDaysLongSessions = withEffort(withDuration(withFitness(), 7), 480)
+    const longDaysShortSessions = withEffort(withDuration(withFitness(), 365), 5)
+
+    expect(isDurationStepValid(shortDaysLongSessions).valid).toBe(true)
+    expect(isEffortStepValid(shortDaysLongSessions).valid).toBe(true)
+    expect(isDurationStepValid(longDaysShortSessions).valid).toBe(true)
+    expect(isEffortStepValid(longDaysShortSessions).valid).toBe(true)
+  })
+})
+
+describe('isMilestoneStepValid', () => {
+  it('is not valid when there is no draft at all', () => {
+    expect(isMilestoneStepValid(null)).toEqual({
+      valid: false,
+      problem: 'unanswered',
+      message: 'Add at least one thing that would prove it is working.',
+    })
+  })
+
+  it('is not valid before the question is answered', () => {
+    expect(isMilestoneStepValid(createOnboardingDraft(T0))).toEqual({
+      valid: false,
+      problem: 'unanswered',
+      message: 'Add at least one thing that would prove it is working.',
+    })
+  })
+
+  it('is not valid for a stored empty list, which our own screens cannot write', () => {
+    // `removeMilestone` deletes the key when the last one goes. An empty list
+    // can only arrive by hand-editing, and it is not an answer.
+    const draft = withField(createOnboardingDraft(T0), 'milestones', [])
+
+    expect(problemOf(isMilestoneStepValid(draft))).toBe('unanswered')
+  })
+
+  it('is valid with exactly one milestone', () => {
+    expect(isMilestoneStepValid(withMilestones(createOnboardingDraft(T0), ['Run 5 km']))).toEqual({
+      valid: true,
+    })
+  })
+
+  it('is valid at exactly the maximum', () => {
+    const texts = Array.from({ length: MAX_MILESTONES }, (_, index) => `Milestone ${index}`)
+
+    expect(isMilestoneStepValid(withMilestones(createOnboardingDraft(T0), texts))).toEqual({
+      valid: true,
+    })
+  })
+
+  it('is invalid with one more than the maximum, and says what to do about it', () => {
+    // Only reachable from hand-edited storage, and refusing is the honest
+    // move: four of these six are sentences somebody typed, and truncating
+    // them would delete real work. Built by hand because `addMilestone`
+    // correctly refuses to produce this state.
+    const draft = withField(
+      createOnboardingDraft(T0),
+      'milestones',
+      Array.from({ length: MAX_MILESTONES + 1 }, (_, index) => ({
+        id: `ms_${index}`,
+        text: `Milestone ${index}`,
+      })),
+    )
+
+    expect(isMilestoneStepValid(draft)).toEqual({
+      valid: false,
+      problem: 'too-long',
+      message: `Keep it to ${MAX_MILESTONES} or fewer — try to combine two.`,
+    })
+  })
+
+  it('does not care what a milestone says', () => {
+    // One word, an emoji and a sentence are all answers. ASCEND does not
+    // grade content, and this is where that would show up if it ever did.
+    for (const text of ['Piano', '🎹', 'Run 5 km without stopping 🏃']) {
+      expect(isMilestoneStepValid(withMilestones(createOnboardingDraft(T0), [text])), text).toEqual(
+        { valid: true },
+      )
+    }
+  })
+
+  it('ignores the step the user happens to be on', () => {
+    const draft = withField(
+      withMilestones(createOnboardingDraft(T0), ['Run 5 km']),
+      'currentStep',
+      'welcome',
+    )
+
+    expect(isMilestoneStepValid(draft)).toEqual({ valid: true })
+  })
+})
+
 describe('validateOnboardingDraft — currentStep means nothing', () => {
   it('refuses a draft that has never started', () => {
     const result = validateOnboardingDraft(null)
@@ -346,39 +595,62 @@ describe('validateOnboardingDraft — currentStep means nothing', () => {
   })
 
   it('reaches the first unbuilt step and says so honestly', () => {
-    // Phase 2B has rules for growth-areas, goal and why, so `duration`
-    // cannot be satisfied. Reporting `not-answered-yet` rather than
-    // `unanswered` keeps our gap clearly distinguishable from a user who
-    // skipped a question — and it is the reason a half-built phase cannot
-    // masquerade as a complete one.
-    const result = validateOnboardingDraft(withWhy(withGoal(withFitness(), 'Run my first 10K'), 'Because I can'))
+    // Phase 2C has rules for growth-areas, goal, why, duration, milestones
+    // and daily-effort, so `summary` cannot be satisfied. Reporting
+    // `not-answered-yet` rather than `unanswered` keeps our gap clearly
+    // distinguishable from a user who skipped a question — and it is the
+    // reason a half-built phase cannot masquerade as a complete one.
+    //
+    // Note WHAT this draft is: every question answered, through the real
+    // setters. It is not a draft with a missing answer being blamed on us.
+    const result = validateOnboardingDraft(fullyAnswered())
 
     expect(result.valid).toBe(false)
     if (result.valid) return
-    expect(result.firstIncompleteStep).toBe('duration')
+    expect(result.firstIncompleteStep).toBe('summary')
     expect(result.problem).toBe('not-answered-yet')
     expect(result.message).toBe(
-      'The “duration” step has not been built yet, so onboarding cannot be completed.',
+      'The “summary” step has not been built yet, so onboarding cannot be completed.',
     )
   })
 
-  it('cannot be made valid by this build, and does not pretend otherwise', () => {
-    // The single most important assertion about Phase 2B. A phase that
-    // quietly relaxed validateOnboardingDraft to make itself look finished
-    // would let a Journey be created from a draft with no duration, no
-    // milestones and no daily effort. Two real answers, a satisfied
-    // earlier step and a currentStep that claims the end is not enough.
-    const complete = withField(
-      withWhy(withGoal(withFitness(), 'Run my first 10K'), 'Because I can'),
-      'currentStep',
-      'summary',
+  it('stops one step short once every Phase 2C question is answered', () => {
+    // The progression through the phases, stated as data. Each of these is
+    // the same draft with one more group of answers, and the stopping point
+    // moves forward by exactly one screen each time. Nothing here relaxes
+    // the gate; the only thing that changes is how far a user can get.
+    const goalOnly = withGoal(withFitness(), 'Run my first 10K')
+    const withWhyAnswered = withWhy(goalOnly, 'Because I can')
+    const withDurationAnswered = withDuration(withWhyAnswered, 30)
+    const withMilestonesAnswered = withMilestones(withDurationAnswered, ['Run 5 km'])
+
+    expect(failure(validateOnboardingDraft(goalOnly)).firstIncompleteStep).toBe('why')
+    expect(failure(validateOnboardingDraft(withWhyAnswered)).firstIncompleteStep).toBe('duration')
+    expect(failure(validateOnboardingDraft(withDurationAnswered)).firstIncompleteStep).toBe(
+      'milestones',
     )
+    expect(failure(validateOnboardingDraft(withMilestonesAnswered)).firstIncompleteStep).toBe(
+      'daily-effort',
+    )
+    expect(failure(validateOnboardingDraft(fullyAnswered())).firstIncompleteStep).toBe('summary')
+  })
+
+  it('cannot be made valid by this build, and does not pretend otherwise', () => {
+    // The single most important assertion about Phase 2C. A phase that
+    // quietly relaxed validateOnboardingDraft to make itself look finished
+    // would let a Journey be created from a draft with no Summary step
+    // behind it — and the Summary step is what creates the Journey.
+    //
+    // Every answer correct, and a currentStep claiming the end: still
+    // refused, and refused at `summary` specifically. Phase 2D owns the
+    // transition, and this test is what stops Phase 2C from having made it.
+    const complete = withField(fullyAnswered(), 'currentStep', 'summary')
 
     const result = validateOnboardingDraft(complete)
 
     expect(result.valid).toBe(false)
     if (result.valid) return
-    expect(result.firstIncompleteStep).toBe('duration')
+    expect(result.firstIncompleteStep).toBe('summary')
   })
 
   it('does not depend on a custom area any more than a suggested one', () => {

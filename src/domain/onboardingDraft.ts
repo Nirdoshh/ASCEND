@@ -7,14 +7,16 @@
  * that is the single most annoying thing this app could do. So the rules
  * below all point the same way.
  *
- * WHY duration / milestones / dailyEffortMinutes ARE ABSENT
+ * WHY duration, milestones AND dailyEffortMinutes ARE OPTIONAL
  *
- * Those fields belong to Phase 2C. They are deliberately not in the type
- * yet, and the reason is the same one that shaped `goal` and `why`: an
- * optional `milestones?: []` invites an empty list, and an empty list
- * means "answered, and the answer is nothing". A question that has not
- * been asked must not be able to look like a question that was answered
- * badly. They are added when there is a real answer to store.
+ * Absent, never a default. `durationDays?: number` and not
+ * `durationDays: 0`, because zero is a real number and never a valid
+ * answer, so storing it would invent a third state between "answered" and
+ * "not answered". `milestones?: []` has the same problem as `goal: ''`:
+ * an empty list reads as "answered, and the answer is nothing", and a
+ * question that has not been asked must not be able to look like a
+ * question that was answered badly. `createOnboardingDraft` sets none of
+ * the three, and a test asserts a fresh draft holds none of them.
  *
  * WHY goal AND why ARE OPTIONAL, NOT BLANK
  *
@@ -75,9 +77,24 @@
 import { MAX_GROWTH_AREA_NAME_LENGTH, mergeGrowthAreas } from './growthAreas'
 import { migratedGrowthAreaId } from './growthAreaId'
 import { normalizeGrowthAreaName, toGrowthAreaDisplayName } from './growthAreaName'
+import {
+  MAX_MILESTONES,
+  MIN_MILESTONES,
+  validateMilestoneText,
+  type MilestoneProblem,
+} from './milestone'
+import type { DraftMilestone } from './milestone'
 import { toPersonalAnswer } from './personalAnswer'
 import type { PersonalAnswer } from './personalAnswer'
+import { isPositiveWholeNumber } from './schedule'
 import type { GrowthArea } from './growthAreas'
+
+/**
+ * The draft's own milestone record type, re-exported so a caller holding an
+ * `OnboardingDraft` does not have to know which file defines the shape of a
+ * field. The RULES live in milestone.ts and stay there.
+ */
+export type { DraftMilestone }
 
 /**
  * Bumped when a stored draft would be read WRONG by a build other than the
@@ -92,10 +109,11 @@ import type { GrowthArea } from './growthAreas'
  *   2  Ids became opaque, but shared one `ga_` prefix.
  *   3  Ids gained explicit per-origin namespaces: ga_s_ / ga_c_ / ga_m_.
  *   4  The draft carries a Goal and a WHY.
+ *   5  The draft carries a Duration, Milestones and a Daily Effort.
  *
- * WHY ADDING goal AND why DID MAKE IT 4
+ * WHY ADDING goal AND why MADE IT 4, AND THESE MAKE IT 5
  *
- * Phase 2B first shipped these fields WITHOUT a bump, on the theory that an
+ * Phase 2B first shipped goal/why WITHOUT a bump, on the theory that an
  * older build would simply ignore a key it had no name for. It does not.
  * The v3 reader rebuilds the draft from the six keys it knows
  * (`normalizeFields` in onboardingDraftRepository.ts), so the next normal
@@ -104,12 +122,15 @@ import type { GrowthArea } from './growthAreas'
  * from commit 112d82d in a worktree and running a v3 draft through it. The
  * fields did not survive, byte for byte or otherwise.
  *
- * The number is what makes that legible. This build now refuses to load or
- * overwrite a draft whose version is higher than it understands, so a v3
- * build seeing a v4 draft stops rather than rewriting it — and the newer
- * answers stay on disk for the build that can read them.
+ * The identical argument applies here, one version later: a v4 build
+ * writing a draft it can read would delete durationDays, milestones and
+ * dailyEffortMinutes on the very next tap. The number is what makes that
+ * legible, and it is what lets this build refuse to load or overwrite a
+ * draft whose version is higher than it understands — so a v4 build seeing
+ * a v5 draft stops rather than rewriting it, and the newer answers stay on
+ * disk for the build that can read them. See ADR 0012.
  */
-export const ONBOARDING_SCHEMA_VERSION = 4
+export const ONBOARDING_SCHEMA_VERSION = 5
 
 /**
  * The full ordered list of onboarding steps.
@@ -179,6 +200,28 @@ export interface OnboardingDraft {
    * Same absence rule as `goal`, and the same Journey-level scope.
    */
   readonly why?: PersonalAnswer
+  /**
+   * How long the Journey runs, in whole days.
+   *
+   * ABSENT until answered, never 0, and never a calendar date — a draft
+   * written on Sunday and one written on Monday would otherwise be
+   * different answers to the same question. See schedule.ts.
+   */
+  readonly durationDays?: number
+  /**
+   * What would prove this is working, in the user's own words.
+   *
+   * NEVER an empty array. Removing the last milestone DELETES this key, so
+   * "not written yet" and "written and then deleted" cannot both be an
+   * empty list. Between MIN_MILESTONES and MAX_MILESTONES.
+   */
+  readonly milestones?: readonly DraftMilestone[]
+  /**
+   * Realistically, minutes a day. Planning context, never a score.
+   *
+   * Same absence rule as `durationDays`, and for the same reason.
+   */
+  readonly dailyEffortMinutes?: number
   readonly startedAt: string
   readonly updatedAt: string
 }
@@ -434,6 +477,240 @@ function setAnswer(
 
 function answerFor(field: AnswerField, answer: PersonalAnswer): Partial<OnboardingDraft> {
   return field === 'goal' ? { goal: answer } : { why: answer }
+}
+
+/** The two numeric answers the draft holds. */
+type CountField = 'durationDays' | 'dailyEffortMinutes'
+
+/**
+ * Records how long the Journey runs, in days.
+ *
+ * `setDailyEffortMinutes` is this function with a different field name, for
+ * the same reason `setWhy` is `setGoal`: one implementation, so the two
+ * numeric steps cannot drift apart in how they treat a value that is not an
+ * answer.
+ *
+ * The rules, each of which is a way to store something that is not what the
+ * user said:
+ *
+ *   1. `undefined` DELETES the field. Blank means unanswered, which is the
+ *      truth and has one representation.
+ *   2. A number that is not a positive whole number also DELETES. Zero is
+ *      not a short duration; it is what an empty number input parses to, and
+ *      letting it in means every later division has to defend against it.
+ *      `isPositiveWholeNumber` is the rule, imported from schedule.ts so the
+ *      setter and the read boundary cannot disagree.
+ *   3. A POSITIVE WHOLE NUMBER IS STORED EVEN IF OUT OF RANGE. Our own
+ *      screens cannot produce one — `parseNumberChoice` refuses it before
+ *      this is ever called — so an out-of-range value can only come from
+ *      hand-edited storage or a build with different bounds. Clamping it to
+ *      the nearest bound here would be a lie about what was chosen, and
+ *      dropping it would throw away a real answer. The step validator
+ *      refuses the step with a message instead.
+ *   4. The same number again returns the identical draft, so re-selecting a
+ *      preset costs no storage write.
+ *   5. Nothing else in the draft is touched. In particular `currentStep` is
+ *      untouched: this records an answer, not a position.
+ */
+export function setDurationDays(
+  draft: OnboardingDraft,
+  value: number | undefined,
+  now: string,
+): OnboardingDraft {
+  return setCount(draft, 'durationDays', value, now)
+}
+
+/** Records realistic daily effort, in minutes. Identical rules to `setDurationDays`. */
+export function setDailyEffortMinutes(
+  draft: OnboardingDraft,
+  value: number | undefined,
+  now: string,
+): OnboardingDraft {
+  return setCount(draft, 'dailyEffortMinutes', value, now)
+}
+
+function setCount(
+  draft: OnboardingDraft,
+  field: CountField,
+  value: number | undefined,
+  now: string,
+): OnboardingDraft {
+  if (!isPositiveWholeNumber(value)) {
+    if (!(field in draft)) return draft
+    const { [field]: _removed, ...rest } = draft
+    return { ...rest, updatedAt: now }
+  }
+
+  if (draft[field] === value) return draft
+
+  return { ...draft, [field]: value, updatedAt: now }
+}
+
+/** What a milestone operation can refuse, and why. */
+export type MilestoneWriteProblem =
+  | MilestoneProblem
+  /** The list already holds MAX_MILESTONES. */
+  | 'too-many'
+  /** The id named no milestone in this draft. */
+  | 'not-found'
+
+export type MilestoneWriteResult =
+  | { readonly ok: true; readonly draft: OnboardingDraft }
+  | {
+      readonly ok: false
+      readonly problem: MilestoneWriteProblem
+      readonly message: string
+    }
+
+/**
+ * Records a milestone.
+ *
+ * One function that validates AND commits, rather than a validating call
+ * followed by a committing one, for the reason `renameCustomGrowthArea` is
+ * one function: an area cannot be created in a half-applied state, and
+ * neither can a milestone.
+ *
+ * `id` is a required parameter for the reason `createCustomGrowthArea`
+ * takes one. Generating an id is the only impure act in this domain, so the
+ * caller decides when it happens and a test can assert on identity.
+ *
+ * The check order puts `too-many` FIRST, unlike `createCustomGrowthArea`.
+ * A full list means the action itself is unavailable, and "you already have
+ * five" is a more useful thing to say than anything about the text — the
+ * screen hides the add control at the limit, so this branch is a backstop
+ * rather than a daily path.
+ *
+ * Appending preserves the order they were added in, which is the order a
+ * person thought of them in and the order Phase 2D will read them back.
+ */
+export function addMilestone(
+  draft: OnboardingDraft,
+  id: string,
+  raw: string,
+  now: string,
+): MilestoneWriteResult {
+  const existing = draft.milestones ?? []
+
+  if (existing.length >= MAX_MILESTONES) {
+    return {
+      ok: false,
+      problem: 'too-many',
+      message: `Keep it to ${MAX_MILESTONES} or fewer — try to combine two.`,
+    }
+  }
+
+  const result = validateMilestoneText(raw, existing)
+  if (!result.ok) return result
+
+  const milestone: DraftMilestone = { id, text: result.text }
+
+  return {
+    ok: true,
+    draft: { ...draft, milestones: [...existing, milestone], updatedAt: now },
+  }
+}
+
+/**
+ * Changes what a milestone says without changing what it IS.
+ *
+ * The rule this exists to make enforceable: an edit must never move a
+ * milestone's id. Everything except the id changes; the id is read, never
+ * written. See milestone.ts for why that matters — a later phase hangs
+ * daily actions, point events and a Journey row off it.
+ *
+ * Three properties, each with a test:
+ *
+ *   1. The milestone being edited is EXCLUDED from the duplicate check.
+ *      Without that, saving an unchanged sentence would report "You already
+ *      wrote that one" about the very milestone being edited, and no
+ *      milestone could ever be saved without first being changed. This is
+ *      the one bug most likely to be introduced here, which is why the
+ *      exclusion is a separate named value rather than a filter inline.
+ *   2. Identical text returns the IDENTICAL draft, so an edit nobody actually
+ *      made costs no storage write — the same rule `setAnswer` follows.
+ *   3. An unknown id is refused rather than creating a second milestone.
+ *      The id is the only handle we have, so a stale one must not silently
+ *      add to the list.
+ */
+export function editMilestone(
+  draft: OnboardingDraft,
+  id: string,
+  raw: string,
+  now: string,
+): MilestoneWriteResult {
+  const existing = draft.milestones ?? []
+
+  if (!existing.some((milestone) => milestone.id === id)) {
+    return { ok: false, problem: 'not-found', message: 'That one is no longer here.' }
+  }
+
+  const others = existing.filter((milestone) => milestone.id !== id)
+  const result = validateMilestoneText(raw, others)
+  if (!result.ok) return result
+
+  if (existing.some((milestone) => milestone.id === id && milestone.text === result.text)) {
+    return { ok: true, draft }
+  }
+
+  return {
+    ok: true,
+    draft: {
+      ...draft,
+      milestones: existing.map((milestone) =>
+        milestone.id === id ? { ...milestone, text: result.text } : milestone,
+      ),
+      updatedAt: now,
+    },
+  }
+}
+
+/**
+ * Removes a milestone.
+ *
+ * Removing the LAST one DELETES the key rather than leaving `[]`. That is
+ * the whole reason an empty list is not a legal value: `milestones: []`
+ * would claim the user had answered this question with nothing, and would
+ * pass a step that exists to ask "what would prove you're making progress?".
+ *
+ * An unknown id is a no-op returning the identical draft, for the reason
+ * `deselectGrowthArea` has one: a stale handle cannot invent a change.
+ *
+ * Note what this deliberately does NOT do, matching ADR 0009: nothing here
+ * touches `currentStep`, and nothing anywhere touches milestones when a
+ * Growth Area is deselected. `reconcileSelections` is still not extended.
+ */
+export function removeMilestone(draft: OnboardingDraft, id: string, now: string): OnboardingDraft {
+  const existing = draft.milestones ?? []
+  if (!existing.some((milestone) => milestone.id === id)) return draft
+
+  const kept = existing.filter((milestone) => milestone.id !== id)
+
+  if (kept.length === 0) {
+    const { milestones: _removed, ...rest } = draft
+    return { ...rest, updatedAt: now }
+  }
+
+  return { ...draft, milestones: kept, updatedAt: now }
+}
+
+/** The milestone count, or 0 when the question has not been answered. */
+export function milestoneCount(draft: OnboardingDraft): number {
+  return draft.milestones?.length ?? 0
+}
+
+/**
+ * Is the milestone question answered at all?
+ *
+ * A named predicate for something three places ask: the screen deciding
+ * whether to show Continue as enabled, the validator deciding whether the
+ * step is satisfied, and a test asserting a fresh draft has not answered
+ * it. `MIN_MILESTONES` is 1, so "answered" and "at least one" are the same
+ * question today — but they are the same question for a REASON, and a
+ * future phase that allows a deliberately empty list would change the
+ * answer here rather than in three places.
+ */
+export function hasAnsweredMilestones(draft: OnboardingDraft): boolean {
+  return milestoneCount(draft) >= MIN_MILESTONES
 }
 
 /** Mirrors growthAreas.ts so both layers report the same vocabulary. */

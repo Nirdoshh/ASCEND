@@ -3,21 +3,29 @@ import { describe, expect, it } from 'vitest'
 import { migratedGrowthAreaId, suggestedGrowthAreaId } from './growthAreaId'
 import { normalizeGrowthAreaName } from './growthAreaName'
 import { createCustomGrowthArea, SUGGESTED_GROWTH_AREAS } from './growthAreas'
+import { MAX_MILESTONES } from './milestone'
 import {
   addCustomGrowthArea,
+  addMilestone,
   completeStep,
   createOnboardingDraft,
   deselectGrowthArea,
+  editMilestone,
+  hasAnsweredMilestones,
   isSelected,
   knownGrowthAreas,
+  milestoneCount,
   nextStep,
   normalizeDraftGrowthArea,
   ONBOARDING_SCHEMA_VERSION,
   ONBOARDING_STEPS,
   reconcileSelections,
+  removeMilestone,
   renameCustomGrowthArea,
   resumeStep,
   selectGrowthArea,
+  setDailyEffortMinutes,
+  setDurationDays,
   setGoal,
   setWhy,
   toggleGrowthArea,
@@ -658,5 +666,321 @@ describe('suggested areas stay suggestions', () => {
     for (const area of draft.customGrowthAreas) {
       expect(area).not.toHaveProperty('kind')
     }
+  })
+})
+
+describe('the Duration answer', () => {
+  it('starts absent, so an unanswered question has one representation', () => {
+    expect(createOnboardingDraft(T0).durationDays).toBeUndefined()
+    expect('durationDays' in createOnboardingDraft(T0)).toBe(false)
+  })
+
+  it('stores a positive whole number and stamps the time', () => {
+    const draft = setDurationDays(createOnboardingDraft(T0), 30, T1)
+
+    expect(draft.durationDays).toBe(30)
+    expect(draft.updatedAt).toBe(T1)
+    expect(draft.startedAt).toBe(T0)
+  })
+
+  it('deletes the field for an absent answer rather than storing undefined', () => {
+    const answered = setDurationDays(createOnboardingDraft(T0), 30, T1)
+    const cleared = setDurationDays(answered, undefined, T2)
+
+    expect('durationDays' in cleared).toBe(false)
+    expect(cleared.updatedAt).toBe(T2)
+  })
+
+  it('deletes the field for zero, a negative or a fraction rather than storing it', () => {
+    // Each of these is a thing an empty or misused number input produces.
+    // None of them is a duration, and the field does not exist to hold one.
+    for (const value of [0, -30, 30.5, NaN, Infinity]) {
+      const answered = setDurationDays(createOnboardingDraft(T0), 30, T1)
+      const cleared = setDurationDays(answered, value, T2)
+
+      expect('durationDays' in cleared, String(value)).toBe(false)
+    }
+  })
+
+  it('stores an out-of-range number rather than clamping or dropping it', () => {
+    // 500 cannot come from our screens. It can come from hand-edited storage
+    // or a build with different bounds, and the honest reading is that
+    // somebody answered 500. The step validator refuses the step; this layer
+    // does not throw the answer away.
+    expect(setDurationDays(createOnboardingDraft(T0), 500, T1).durationDays).toBe(500)
+    expect(setDurationDays(createOnboardingDraft(T0), 1, T1).durationDays).toBe(1)
+  })
+
+  it('returns the identical draft for the same number, so re-picking costs no write', () => {
+    const answered = setDurationDays(createOnboardingDraft(T0), 30, T1)
+
+    expect(setDurationDays(answered, 30, T2)).toBe(answered)
+  })
+
+  it('returns the identical draft when clearing an already-absent field', () => {
+    const draft = createOnboardingDraft(T0)
+
+    expect(setDurationDays(draft, undefined, T1)).toBe(draft)
+  })
+
+  it('leaves currentStep alone, because an answer is not a position', () => {
+    const draft = completeStep(createOnboardingDraft(T0), 'why', T0)
+    const answered = setDurationDays(draft, 30, T1)
+
+    expect(answered.currentStep).toBe('duration')
+  })
+})
+
+describe('the Daily Effort answer', () => {
+  it('starts absent', () => {
+    expect('dailyEffortMinutes' in createOnboardingDraft(T0)).toBe(false)
+  })
+
+  it('stores a positive whole number of minutes', () => {
+    expect(setDailyEffortMinutes(createOnboardingDraft(T0), 20, T1).dailyEffortMinutes).toBe(20)
+  })
+
+  it('deletes the field for zero, a negative, a fraction or an absence', () => {
+    for (const value of [0, -20, 20.5, NaN, Infinity, undefined]) {
+      const answered = setDailyEffortMinutes(createOnboardingDraft(T0), 20, T1)
+      const cleared = setDailyEffortMinutes(answered, value, T2)
+
+      expect('dailyEffortMinutes' in cleared, String(value)).toBe(false)
+    }
+  })
+
+  it('is an independent field from Duration', () => {
+    // They are stored and reasoned about separately even though they share an
+    // implementation; answering one must never imply the other.
+    const both = setDailyEffortMinutes(
+      setDurationDays(createOnboardingDraft(T0), 30, T1),
+      20,
+      T2,
+    )
+
+    expect(both.durationDays).toBe(30)
+    expect(both.dailyEffortMinutes).toBe(20)
+
+    const effortOnly = setDailyEffortMinutes(createOnboardingDraft(T0), 20, T1)
+    expect('durationDays' in effortOnly).toBe(false)
+  })
+})
+
+describe('milestones', () => {
+  function empty(): OnboardingDraft {
+    return createOnboardingDraft(T0)
+  }
+
+  function withOne(text = 'Run 5 km'): OnboardingDraft {
+    const result = addMilestone(empty(), 'ms_first', text, T0)
+    if (!result.ok) throw new Error(result.message)
+    return result.draft
+  }
+
+  describe('addMilestone', () => {
+    it('starts absent, so an unanswered question has one representation', () => {
+      expect('milestones' in empty()).toBe(false)
+      expect(milestoneCount(empty())).toBe(0)
+      expect(hasAnsweredMilestones(empty())).toBe(false)
+    })
+
+    it('appends with the id the caller minted, in the order they were added', () => {
+      const first = withOne('Run 5 km')
+      const second = addMilestone(first, 'ms_second', 'Buy new shoes', T1)
+
+      expect(second.ok).toBe(true)
+      if (!second.ok) return
+
+      expect(second.draft.milestones).toEqual([
+        { id: 'ms_first', text: 'Run 5 km' },
+        { id: 'ms_second', text: 'Buy new shoes' },
+      ])
+      expect(second.draft.updatedAt).toBe(T1)
+      expect(hasAnsweredMilestones(second.draft)).toBe(true)
+    })
+
+    it('trims the outer whitespace of what is stored', () => {
+      const result = addMilestone(empty(), 'ms_a', '   Run 5 km   ', T0)
+      if (!result.ok) throw new Error(result.message)
+
+      expect(result.draft.milestones?.[0]?.text).toBe('Run 5 km')
+    })
+
+    it('refuses a blank box and writes nothing', () => {
+      const result = addMilestone(empty(), 'ms_a', '   ', T0)
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.problem).toBe('empty')
+    })
+
+    it('refuses a duplicate with a message rather than storing a second copy', () => {
+      const result = addMilestone(withOne('Run 5 km'), 'ms_second', 'run 5km', T1)
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.problem).toBe('duplicate')
+    })
+
+    it('refuses a sixth milestone, and checks that BEFORE looking at the text', () => {
+      // The order matters: "you already have five" is more useful than a
+      // complaint about the sixth sentence, because the sixth could never be
+      // added whatever it said.
+      let draft = empty()
+      for (let index = 0; index < MAX_MILESTONES; index += 1) {
+        const result = addMilestone(draft, `ms_${index}`, `Milestone ${index}`, T0)
+        if (!result.ok) throw new Error(result.message)
+        draft = result.draft
+      }
+
+      const result = addMilestone(draft, 'ms_overflow', '', T1)
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.problem).toBe('too-many')
+      expect(milestoneCount(draft)).toBe(MAX_MILESTONES)
+    })
+
+    it('does not mutate the draft it was given', () => {
+      const before = withOne('Run 5 km')
+      const snapshot = structuredClone(before)
+
+      addMilestone(before, 'ms_second', 'Buy new shoes', T1)
+
+      expect(before).toEqual(snapshot)
+    })
+
+    it('accepts emoji and other scripts without rewriting them', () => {
+      const emoji = addMilestone(empty(), 'ms_a', '🎹 every day', T0)
+      if (!emoji.ok) throw new Error(emoji.message)
+      expect(emoji.draft.milestones?.[0]?.text).toBe('🎹 every day')
+
+      const chinese = addMilestone(empty(), 'ms_b', '沉默。Flush。', T0)
+      if (!chinese.ok) throw new Error(chinese.message)
+      expect(chinese.draft.milestones?.[0]?.text).toBe('沉默。Flush。')
+    })
+  })
+
+  describe('editMilestone', () => {
+    it('changes the sentence and NOTHING else', () => {
+      const before = withOne('Run 5 km')
+      const result = editMilestone(before, 'ms_first', 'Run 10 km', T1)
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+
+      expect(result.draft.milestones).toEqual([{ id: 'ms_first', text: 'Run 10 km' }])
+      expect(result.draft.updatedAt).toBe(T1)
+    })
+
+    it('keeps the id stable across a rename — the whole point of the operation', () => {
+      const before = withOne('Run 5 km')
+      const after = editMilestone(before, 'ms_first', 'Run a half marathon', T1)
+
+      expect(after.ok).toBe(true)
+      if (!after.ok) return
+
+      expect(after.draft.milestones?.[0]?.id).toBe('ms_first')
+      expect(after.draft.milestones?.[0]?.id).toBe(before.milestones?.[0]?.id)
+    })
+
+    it('saves an unchanged sentence without complaining about a duplicate', () => {
+      // The bug this guards against: the milestone being edited is included in
+      // its own duplicate check, so nothing can ever be saved.
+      const before = withOne('Run 5 km')
+      const result = editMilestone(before, 'ms_first', 'Run 5 km', T1)
+
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.draft).toBe(before)
+    })
+
+    it('still refuses a sentence that duplicates a DIFFERENT milestone', () => {
+      const two = addMilestone(withOne('Run 5 km'), 'ms_second', 'Buy new shoes', T1)
+      if (!two.ok) throw new Error(two.message)
+
+      const result = editMilestone(two.draft, 'ms_first', 'Buy new shoes', T2)
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.problem).toBe('duplicate')
+    })
+
+    it('refuses a blank box rather than deleting the milestone through an edit', () => {
+      const before = withOne('Run 5 km')
+      const result = editMilestone(before, 'ms_first', '   ', T1)
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.problem).toBe('empty')
+    })
+
+    it('refuses an unknown id instead of appending a second milestone', () => {
+      const before = withOne('Run 5 km')
+      const result = editMilestone(before, 'ms_nope', 'Something else', T1)
+
+      expect(result.ok).toBe(false)
+      if (result.ok) return
+      expect(result.problem).toBe('not-found')
+    })
+
+    it('leaves the other milestones exactly where they were', () => {
+      const two = addMilestone(withOne('Run 5 km'), 'ms_second', 'Buy new shoes', T1)
+      if (!two.ok) throw new Error(two.message)
+
+      const result = editMilestone(two.draft, 'ms_second', 'Book the race', T2)
+      if (!result.ok) throw new Error(result.message)
+
+      expect(result.draft.milestones).toEqual([
+        { id: 'ms_first', text: 'Run 5 km' },
+        { id: 'ms_second', text: 'Book the race' },
+      ])
+    })
+  })
+
+  describe('removeMilestone', () => {
+    it('removes just the named one', () => {
+      const two = addMilestone(withOne('Run 5 km'), 'ms_second', 'Buy new shoes', T1)
+      if (!two.ok) throw new Error(two.message)
+
+      const after = removeMilestone(two.draft, 'ms_first', T2)
+
+      expect(after.milestones).toEqual([{ id: 'ms_second', text: 'Buy new shoes' }])
+      expect(after.updatedAt).toBe(T2)
+    })
+
+    it('deletes the key when the last one goes, rather than leaving an empty list', () => {
+      // `milestones: []` would claim the user answered this question with
+      // nothing and would pass a step that exists to ask it.
+      const after = removeMilestone(withOne(), 'ms_first', T1)
+
+      expect('milestones' in after).toBe(false)
+      expect(hasAnsweredMilestones(after)).toBe(false)
+    })
+
+    it('is a no-op returning the identical draft for an unknown id', () => {
+      const before = withOne()
+
+      expect(removeMilestone(before, 'ms_nope', T1)).toBe(before)
+    })
+
+    it('is a no-op returning the identical draft when there is no list at all', () => {
+      const before = empty()
+
+      expect(removeMilestone(before, 'ms_anything', T1)).toBe(before)
+    })
+
+    it('does not touch the Duration or Effort answers', () => {
+      const answers = setDailyEffortMinutes(
+        setDurationDays(withOne(), 30, T1),
+        20,
+        T1,
+      )
+
+      const after = removeMilestone(answers, 'ms_first', T2)
+
+      expect(after.durationDays).toBe(30)
+      expect(after.dailyEffortMinutes).toBe(20)
+    })
   })
 })

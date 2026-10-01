@@ -14,7 +14,31 @@ interface BaseTextFieldProps {
 
 export interface TextFieldProps
   extends BaseTextFieldProps,
-    Omit<InputHTMLAttributes<HTMLInputElement>, 'aria-describedby' | 'id'> {}
+    Omit<InputHTMLAttributes<HTMLInputElement>, 'aria-describedby' | 'id'> {
+  /**
+   * Exposed so a form can move focus to the field it is complaining about.
+   *
+   * This used to be declared on the textarea ONLY, with the reasoning that
+   * nothing in ASCEND needed to focus a single-line input and an unused prop
+   * is a prop somebody eventually uses for the wrong thing. Phase 2C is the
+   * counter-example that turns out to have been foreseeable all along: the
+   * custom number field on the Duration and Daily Effort screens is a
+   * single-line input, and it has exactly the same reason to want focus as
+   * the Goal textarea does — a numeric complaint is announced, but a
+   * screen-reader user still has to be taken to the box that needs fixing.
+   *
+   * So the constraint is lifted rather than worked around. The alternative
+   * was querying the DOM for the <input> inside the field's wrapper, which
+   * would reach past the component's own API to do something the component
+   * can do itself.
+   *
+   * `InputHTMLAttributes` does not carry `ref` (that lives in
+   * ClassAttributes), so it has to be declared — and because this is React 19
+   * it needs no `forwardRef` wrapper: `ref` arrives as an ordinary prop and
+   * `{...rest}` passes it to the <input>.
+   */
+  ref?: Ref<HTMLInputElement>
+}
 
 export interface TextAreaFieldProps
   extends BaseTextFieldProps,

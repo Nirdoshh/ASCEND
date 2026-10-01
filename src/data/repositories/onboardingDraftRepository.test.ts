@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import { migratedGrowthAreaId, suggestedGrowthAreaId } from '../../domain/growthAreaId'
+import { recoveredMilestoneId } from '../../domain/milestone'
 import {
   addCustomGrowthArea,
+  addMilestone,
   createOnboardingDraft,
   selectGrowthArea,
+  setDailyEffortMinutes,
+  setDurationDays,
+  setGoal,
+  setWhy,
   ONBOARDING_SCHEMA_VERSION,
+  type OnboardingDraft,
 } from '../../domain/onboardingDraft'
 import { createWebStorageStore } from '../storage'
 import { ASCEND_ONBOARDING_DRAFT_KEY } from '../storage/keys'
@@ -17,6 +24,7 @@ import {
   migrateDraftV1ToV2,
   migrateDraftV2ToV3,
   migrateDraftV3ToV4,
+  migrateDraftV4ToV5,
   ONBOARDING_DRAFT_MIGRATIONS,
 } from './onboardingDraftRepository'
 
@@ -97,15 +105,20 @@ describe('migrateAndNormalizeDraft', () => {
   it('drops a field it has no concept of, at its OWN version too', () => {
     // Adopting a shape we recognise is leniency; inventing one we do not is
     // how a draft acquires a field that nothing validates, nothing displays
-    // and nothing can trust. `milestones` is a real future field, so it is
-    // the honest example even in a current-version draft.
+    // and nothing can trust.
+    //
+    // This used to name `milestones`, which was a real future field and
+    // therefore the honest example. Phase 2C made `milestones` a concept, so
+    // the test now uses a field that is genuinely still beyond this build —
+    // and the change is itself the point: a field stops being dropped on the
+    // day a schema version is bumped to claim it, never before.
     const result = migrateAndNormalizeDraft(
       {
         schemaVersion: ONBOARDING_SCHEMA_VERSION,
         currentStep: 'goal',
         selectedGrowthAreaIds: [],
         customGrowthAreas: [],
-        milestones: [{ text: 'finish a marathon', done: false }],
+        effortReminders: [{ at: '07:00', enabled: true }],
         startedAt: NOW,
         updatedAt: LATER,
       },
@@ -113,7 +126,7 @@ describe('migrateAndNormalizeDraft', () => {
     )
 
     expect(result).not.toBeNull()
-    expect(result).not.toHaveProperty('milestones')
+    expect(result).not.toHaveProperty('effortReminders')
   })
 
   it('drops a goal or why that is not text, rather than storing junk', () => {
@@ -346,10 +359,11 @@ describe('migrateAndNormalizeDraft', () => {
 
 describe('the migration registry', () => {
   it('is keyed by the version each migration upgrades FROM, in order', () => {
-    expect(Object.keys(ONBOARDING_DRAFT_MIGRATIONS)).toEqual(['1', '2', '3'])
+    expect(Object.keys(ONBOARDING_DRAFT_MIGRATIONS)).toEqual(['1', '2', '3', '4'])
     expect(ONBOARDING_DRAFT_MIGRATIONS[1]).toBe(migrateDraftV1ToV2)
     expect(ONBOARDING_DRAFT_MIGRATIONS[2]).toBe(migrateDraftV2ToV3)
     expect(ONBOARDING_DRAFT_MIGRATIONS[3]).toBe(migrateDraftV3ToV4)
+    expect(ONBOARDING_DRAFT_MIGRATIONS[4]).toBe(migrateDraftV4ToV5)
   })
 
   it('has a migration for every version below the current one', () => {
@@ -755,7 +769,7 @@ describe('v2 to v3 migration', () => {
     expect(repository.load()).toEqual(loaded)
   })
 
-  it('walks a v1 draft all the way to v4 without losing anything', () => {
+  it('walks a v1 draft all the way to the current version without losing anything', () => {
     const result = migrateAndNormalizeDraft(phase2ADraft(), NOW)
 
     expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
@@ -819,6 +833,450 @@ describe('v3 to v4 migration', () => {
     // draft and sends the user back to the welcome screen, which would be
     // every existing user, all at once.
     expect(ONBOARDING_DRAFT_MIGRATIONS[3]).toBe(migrateDraftV3ToV4)
+  })
+})
+
+describe('v4 to v5 migration', () => {
+  /** A v4 draft exactly as the Phase 2B build wrote it: a Goal and a WHY, nothing more. */
+  function v4Draft(overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 4,
+      currentStep: 'why',
+      selectedGrowthAreaIds: ['ga_s_fitness'],
+      customGrowthAreas: [],
+      goal: { text: 'Run my first 10K' },
+      why: { text: 'For my daughter' },
+      startedAt: NOW,
+      updatedAt: LATER,
+      ...overrides,
+    }
+  }
+
+  it('carries an untouched v4 draft forward, still unanswered on the new questions', () => {
+    const result = migrateAndNormalizeDraft(v4Draft(), NOW)
+
+    expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
+    expect(result?.goal).toEqual({ text: 'Run my first 10K' })
+    expect(result?.why).toEqual({ text: 'For my daughter' })
+    expect(result).not.toHaveProperty('durationDays')
+    expect(result).not.toHaveProperty('milestones')
+    expect(result).not.toHaveProperty('dailyEffortMinutes')
+  })
+
+  it('keeps Phase 2C fields that were stored under the old v4 number', () => {
+    // The Phase 2C build wrote these three fields for one commit before this
+    // number was corrected, so real v4 drafts exist WITH them. The
+    // pass-through must hand them to normalizeFields rather than treat them
+    // as unrecognised keys to delete.
+    const result = migrateAndNormalizeDraft(
+      v4Draft({
+        durationDays: 30,
+        milestones: [{ id: 'ms_keepme00000001', text: 'Run 5 km' }],
+        dailyEffortMinutes: 20,
+      }),
+      NOW,
+    )
+
+    expect(result?.durationDays).toBe(30)
+    expect(result?.dailyEffortMinutes).toBe(20)
+    expect(result?.milestones).toEqual([{ id: 'ms_keepme00000001', text: 'Run 5 km' }])
+  })
+
+  it('is a pure pass-through', () => {
+    const stored = v4Draft()
+
+    expect(migrateDraftV4ToV5(stored)).toBe(stored)
+  })
+
+  it('is registered, so a v4 draft is not mistaken for an unreconstructable one', () => {
+    // A missing entry at 4 would send every existing Phase 2B user back to the
+    // welcome screen and lose their Goal and WHY outright.
+    expect(ONBOARDING_DRAFT_MIGRATIONS[4]).toBe(migrateDraftV4ToV5)
+  })
+
+  it('runs the new step after every earlier one, in order', () => {
+    const order: number[] = []
+    const spy = (version: number) => (value: unknown) => {
+      order.push(version)
+      return value
+    }
+
+    migrateAndNormalizeDraft(
+      { ...phase2ADraft() },
+      NOW,
+      ONBOARDING_SCHEMA_VERSION,
+      { 1: spy(1), 2: spy(2), 3: spy(3), 4: spy(4) },
+    )
+
+    expect(order).toEqual([1, 2, 3, 4])
+  })
+
+  it('walks a real Phase 2B draft from v1 to v5 through the store without losing the answers', () => {
+    window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, JSON.stringify({
+      ...phase2ADraft(),
+      goal: { text: 'Run my first 10K' },
+      why: { text: 'For my daughter' },
+    }))
+
+    const repository = createOnboardingDraftRepository(createWebStorageStore())
+    const loaded = repository.load()
+
+    expect(loaded?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
+    expect(loaded?.goal).toEqual({ text: 'Run my first 10K' })
+    expect(loaded?.why).toEqual({ text: 'For my daughter' })
+    expect(loaded?.selectedGrowthAreaIds).toEqual([
+      suggestedGrowthAreaId('fitness'),
+      migratedGrowthAreaId('piano'),
+    ])
+    expect(loaded).not.toHaveProperty('durationDays')
+
+    expect(loaded).not.toBeNull()
+    if (!loaded) return
+    repository.save(loaded)
+    expect(repository.load()).toEqual(loaded)
+  })
+})
+
+describe('the Duration, Milestones and Daily Effort fields', () => {
+  /** A stored draft carrying all three Phase 2C answers, as bytes. */
+  function storedPhase2CDraft() {
+    let draft: OnboardingDraft = selectGrowthArea(createOnboardingDraft(NOW), suggestedGrowthAreaId('fitness'), NOW)
+    draft = setGoal(draft, 'Run my first 10K', NOW)
+    draft = setWhy(draft, 'For my daughter', NOW)
+    draft = setDurationDays(draft, 30, NOW)
+
+    const added = addMilestone(draft, 'ms_first000000001', 'Run 5 km', NOW)
+    if (!added.ok) throw new Error(added.message)
+    draft = added.draft
+
+    return setDailyEffortMinutes(draft, 20, NOW)
+  }
+
+  it('reads all three back unchanged', () => {
+    const stored = storedPhase2CDraft()
+    const result = migrateAndNormalizeDraft(stored, NOW)
+
+    expect(result).toEqual(stored)
+  })
+
+  it('never writes an undefined key for any of the three', () => {
+    const result = migrateAndNormalizeDraft(createOnboardingDraft(NOW), NOW)
+
+    expect(result).not.toBeNull()
+    for (const key of ['durationDays', 'milestones', 'dailyEffortMinutes']) {
+      expect(Object.keys(result as object), key).not.toContain(key)
+    }
+  })
+
+  describe('durationDays and dailyEffortMinutes', () => {
+    it('keeps a whole number even when it is outside this build’s bounds', () => {
+      // Hand-edited storage, or a build with different bounds. Either way
+      // somebody gave us this number, and the step validator refuses the step
+      // rather than this layer throwing the answer away.
+      const result = migrateAndNormalizeDraft(
+        { ...createOnboardingDraft(NOW), durationDays: 500, dailyEffortMinutes: 1000 },
+        NOW,
+      )
+
+      expect(result?.durationDays).toBe(500)
+      expect(result?.dailyEffortMinutes).toBe(1000)
+    })
+
+    it('drops zero, negatives, fractions, strings and junk', () => {
+      const junk = [0, -1, 30.5, NaN, Infinity, '30', true, {}, [], null, undefined]
+
+      for (const value of junk) {
+        const result = migrateAndNormalizeDraft(
+          { ...createOnboardingDraft(NOW), durationDays: value, dailyEffortMinutes: value },
+          NOW,
+        )
+
+        expect(result, JSON.stringify(value)).not.toBeNull()
+        expect(result, JSON.stringify(value)).not.toHaveProperty('durationDays')
+        expect(result, JSON.stringify(value)).not.toHaveProperty('dailyEffortMinutes')
+      }
+    })
+
+    it('does not let one bad number discard the other good one', () => {
+      const result = migrateAndNormalizeDraft(
+        { ...createOnboardingDraft(NOW), durationDays: 0, dailyEffortMinutes: 20 },
+        NOW,
+      )
+
+      expect(result).not.toHaveProperty('durationDays')
+      expect(result?.dailyEffortMinutes).toBe(20)
+    })
+  })
+
+  describe('milestones', () => {
+    it('reads a well-formed list back in order', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [
+            { id: 'ms_b', text: 'Buy new shoes' },
+            { id: 'ms_a', text: 'Run 5 km' },
+          ],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones).toEqual([
+        { id: 'ms_b', text: 'Buy new shoes' },
+        { id: 'ms_a', text: 'Run 5 km' },
+      ])
+    })
+
+    it('trims each stored sentence and keeps its wording and emoji', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [{ id: 'ms_a', text: '  Run 5 km 🏃  ' }],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones?.[0]?.text).toBe('Run 5 km 🏃')
+    })
+
+    it('recovers a deterministic id when one is missing or blank', () => {
+      const expected = recoveredMilestoneId('Run 5 km')
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [{ text: 'Run 5 km' }, { id: '   ', text: 'Buy new shoes' }],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones?.[0]?.id).toBe(expected)
+      expect(result?.milestones?.[1]?.id).toBe(recoveredMilestoneId('Buy new shoes'))
+    })
+
+    it('repairing the same draft twice gives the same ids, so nothing appears to vanish', () => {
+      const raw = {
+        ...createOnboardingDraft(NOW),
+        milestones: [{ text: 'Run 5 km' }],
+      }
+
+      const first = migrateAndNormalizeDraft(raw, NOW)
+      const second = migrateAndNormalizeDraft(raw, NOW)
+
+      expect(first?.milestones).toEqual(second?.milestones)
+    })
+
+    it('turns a stored empty list into an ABSENT key, not an empty one', () => {
+      const result = migrateAndNormalizeDraft(
+        { ...createOnboardingDraft(NOW), milestones: [] },
+        NOW,
+      )
+
+      expect(result).not.toHaveProperty('milestones')
+    })
+
+    it('turns a list where nothing was usable into an ABSENT key', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [null, 42, 'Run 5 km', {}, { text: '' }, { text: '   ' }],
+        },
+        NOW,
+      )
+
+      expect(result).not.toHaveProperty('milestones')
+    })
+
+    it('keeps the good entries and drops the unusable ones', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [
+            null,
+            { id: 'ms_a', text: 'Run 5 km' },
+            42,
+            { id: 'ms_b', text: 99 },
+            { id: 'ms_c', text: 'Buy new shoes' },
+          ],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones).toEqual([
+        { id: 'ms_a', text: 'Run 5 km' },
+        { id: 'ms_c', text: 'Buy new shoes' },
+      ])
+    })
+
+    it('drops a repeated id, keeping the first', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [
+            { id: 'ms_same', text: 'Run 5 km' },
+            { id: 'ms_same', text: 'Buy new shoes' },
+          ],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones).toEqual([{ id: 'ms_same', text: 'Run 5 km' }])
+    })
+
+    it('drops a repeated sentence, keeping the first spelling', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [
+            { id: 'ms_a', text: 'Run 5 km' },
+            { id: 'ms_b', text: '  run  5km!  ' },
+          ],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones).toEqual([{ id: 'ms_a', text: 'Run 5 km' }])
+    })
+
+    it('does NOT treat two different emoji as the same sentence', () => {
+      const result = migrateAndNormalizeDraft(
+        {
+          ...createOnboardingDraft(NOW),
+          milestones: [
+            { id: 'ms_a', text: '🎹' },
+            { id: 'ms_b', text: '🥁' },
+          ],
+        },
+        NOW,
+      )
+
+      expect(result?.milestones).toHaveLength(2)
+    })
+
+    it('does NOT cap the count, because those are real sentences', () => {
+      // Eight milestones cannot come from our screens, and truncating them
+      // would silently delete work. The step validator refuses the step and
+      // says to combine two; nothing is lost on disk until the user decides.
+      const eight = Array.from({ length: 8 }, (_, index) => ({
+        id: `ms_${index}`,
+        text: `Milestone ${index}`,
+      }))
+
+      const result = migrateAndNormalizeDraft(
+        { ...createOnboardingDraft(NOW), milestones: eight },
+        NOW,
+      )
+
+      expect(result?.milestones).toHaveLength(8)
+    })
+
+    it('ignores a non-array value rather than storing the object', () => {
+      for (const value of ['Run 5 km', 42, {}, true]) {
+        const result = migrateAndNormalizeDraft(
+          { ...createOnboardingDraft(NOW), milestones: value },
+          NOW,
+        )
+
+        expect(result, JSON.stringify(value)).not.toHaveProperty('milestones')
+      }
+    })
+  })
+})
+
+describe('an older build cannot silently overwrite the Phase 2C fields', () => {
+  /**
+   * The migrations a build whose current version is 4 would have registered.
+   *
+   * This is not a hypothetical: it is the exact code that was shipped, and it
+   * still knows nothing about `durationDays`, `milestones` or
+   * `dailyEffortMinutes`.
+   */
+  const A_BUILD_THAT_ONLY_KNOWS_V4 = {
+    1: migrateDraftV1ToV2,
+    2: migrateDraftV2ToV3,
+    3: migrateDraftV3ToV4,
+  }
+
+  /** A v5 draft carrying all three Phase 2C answers, as it would sit on disk. */
+  function storedV5() {
+    let draft: OnboardingDraft = setGoal(createOnboardingDraft(NOW), 'Run my first 10K', NOW)
+    draft = setDurationDays(draft, 30, NOW)
+
+    const added = addMilestone(draft, 'ms_first000000001', 'Run 5 km', NOW)
+    if (!added.ok) throw new Error(added.message)
+
+    return setDailyEffortMinutes(added.draft, 20, NOW)
+  }
+
+  it('REFUSES the draft outright, because it declares a version the old build does not know', () => {
+    // Refusing touches nothing. The old build shows a welcome screen, which
+    // loses nothing at all — the newer build still reads the same bytes.
+    const result = migrateAndNormalizeDraft(storedV5(), NOW, 4, A_BUILD_THAT_ONLY_KNOWS_V4)
+
+    expect(result).toBeNull()
+  })
+
+  it('is necessary, because the reader that rebuilds from known keys drops what it cannot name', () => {
+    // The literal counterfactual — these three fields written under version 4
+    // and then read by the old build — cannot be run here: this build's
+    // `normalizeFields` already knows all three keys, so it would keep them
+    // whatever version number they arrived under. Re-implementing the old
+    // reader in the test would prove nothing about the code that shipped.
+    //
+    // What CAN be run, and is the mechanism commit b3c8a91 turned into a bug,
+    // is that a rebuild-from-known-keys reader drops a key it has no name for.
+    // `effortReminders` stands in for such a key; the drop is real, silent,
+    // and happens on the ordinary load-and-save path.
+    const unBumped = {
+      schemaVersion: 4,
+      currentStep: 'why',
+      selectedGrowthAreaIds: [],
+      customGrowthAreas: [],
+      goal: { text: 'Run my first 10K' },
+      durationDays: 30,
+      milestones: [{ id: 'ms_a', text: 'Run 5 km' }],
+      dailyEffortMinutes: 20,
+      effortReminders: [{ at: '20:00', enabled: true }],
+      startedAt: NOW,
+      updatedAt: LATER,
+    }
+
+    const result = migrateAndNormalizeDraft(unBumped, NOW, 4, A_BUILD_THAT_ONLY_KNOWS_V4)
+
+    // The draft is accepted, because its declared version is one the old
+    // build understands...
+    expect(result).not.toBeNull()
+    // ...and the key the old build has no name for is gone.
+    expect(result).not.toHaveProperty('effortReminders')
+    // The fields the old build DOES know survive, which is what made the
+    // original bug so quiet: the draft looked perfectly fine afterwards.
+    expect(result?.goal).toEqual({ text: 'Run my first 10K' })
+  })
+
+  it('still protects the bytes through a real save from the current build', () => {
+    // The other half: this build writes v5, and a future v6 build refuses to
+    // overwrite it. Checked here against a v6 draft carrying a v6-only field,
+    // to prove the guard is about the version rather than about any one key.
+    const future = JSON.stringify({
+      schemaVersion: ONBOARDING_SCHEMA_VERSION + 1,
+      currentStep: 'summary',
+      selectedGrowthAreaIds: [],
+      customGrowthAreas: [],
+      durationDays: 30,
+      milestones: [{ id: 'ms_a', text: 'Run 5 km' }],
+      dailyEffortMinutes: 20,
+      reflectionPrompts: [{ at: '20:00' }],
+      startedAt: NOW,
+      updatedAt: LATER,
+    })
+
+    window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, future)
+
+    const repository = createOnboardingDraftRepository(createWebStorageStore())
+
+    expect(repository.load()).toBeNull()
+    expect(repository.save(createOnboardingDraft(NOW))).toBe('newer-schema')
+    // Byte for byte. Everything the newer build wrote is still there.
+    expect(window.localStorage.getItem(ASCEND_ONBOARDING_DRAFT_KEY)).toBe(future)
   })
 })
 

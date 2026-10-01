@@ -449,8 +449,15 @@ describe('migrated ids', () => {
   it('is fixed for known names, so a future re-migration cannot drift', () => {
     // If a hash implementation ever changes, existing ids are already
     // stored and unaffected — but a draft that failed to migrate twice
-    // would produce something different. These values pin that.
-    expect(migratedGrowthAreaId('piano')).toMatch(/^ga_m_[0-9a-z]{14}$/)
+    // would produce something different. These values pin that, by VALUE.
+    //
+    // They were produced by the implementation as it shipped before the
+    // hash moved into idHash.ts, so this test is also what proves that
+    // extraction changed no id. A milestone now uses the same hash; if it
+    // had been copy-pasted instead, these two would drift apart silently.
+    expect(migratedGrowthAreaId('piano')).toBe('ga_m_0je9fby0j9v4i9')
+    expect(migratedGrowthAreaId('fitness')).toBe('ga_m_15cqdmf1ayr7hg')
+    expect(migratedGrowthAreaId('digital marketing')).toBe('ga_m_07e65zf1r0qifw')
     expect(migratedGrowthAreaId('')).toMatch(/^ga_m_[0-9a-z]{14}$/)
   })
 

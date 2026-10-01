@@ -1,21 +1,23 @@
 import type { GrowthArea } from '../../domain/growthAreas'
-import { cn } from '../../lib/cn'
-import './GrowthAreaChip.css'
+import { ChoiceChip } from '../../components/ui'
 
 /**
  * One selectable Growth Area.
  *
- * A real <button> with `aria-pressed`, not a checkbox and not a clickable
- * <div>. That choice buys three things for free and correctly:
+ * A thin wrapper around the design system's `ChoiceChip`, and the thinness is
+ * the point. The chip is presentation — a 44px pill with a pressed state and a
+ * tick. This is the piece that knows what it is presenting: that a Growth Area
+ * is chosen by ID rather than by name, and that clicking must carry that ID
+ * back to the toggle.
  *
- *   - Enter and Space both toggle it, so it works with a keyboard.
- *   - A screen reader announces "Fitness, toggle button, pressed",
- *     which says what it is and what state it is in.
- *   - It is in the tab order exactly once, in a sensible reading order.
+ * Keeping the domain-shaped adapter in the feature is what stops the design
+ * system having to learn about Growth Areas, and what lets the next list of
+ * choices reuse the pill without inheriting this one's meaning.
  *
- * Selection is never signalled by colour alone: a check mark appears
- * when the area is chosen, so the state survives greyscale, colour
- * blindness and forced-colours mode (WCAG 1.4.1).
+ * The accessibility decisions — a real <button>, `aria-pressed`, and a tick so
+ * selection is not signalled by colour alone — moved into `ChoiceChip` and are
+ * documented there. Nothing about this screen's behaviour moved with them:
+ * same role, same accessible name, same pressed state, same tick.
  */
 export function GrowthAreaChip({
   area,
@@ -27,21 +29,8 @@ export function GrowthAreaChip({
   onToggle: (id: string) => void
 }) {
   return (
-    <button
-      type="button"
-      className={cn('area-chip', selected && 'area-chip--selected')}
-      aria-pressed={selected}
-      onClick={() => onToggle(area.id)}
-    >
-      {/*
-        Decorative: the state is already carried by aria-pressed, so
-        announcing the tick as well would just be noise. Its presence is
-        still visible, which is the part that matters.
-      */}
-      <span className="area-chip__tick" aria-hidden="true">
-        {selected ? '✓' : ''}
-      </span>
-      <span className="area-chip__name">{area.name}</span>
-    </button>
+    <ChoiceChip selected={selected} onClick={() => onToggle(area.id)}>
+      {area.name}
+    </ChoiceChip>
   )
 }
