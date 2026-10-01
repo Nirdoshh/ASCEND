@@ -15,3 +15,15 @@ export {
   ONBOARDING_DRAFT_MIGRATIONS,
   type OnboardingDraftRepository,
 } from './onboardingDraftRepository'
+
+export {
+  createJourneyRepository,
+  type JourneyRepository,
+  type JourneyRepositoryWriteResult,
+} from './journeyRepository'
+
+export {
+  createDailyPlanRepository,
+  type DailyPlanRepository,
+  type DailyPlanRepositoryWriteResult,
+} from './dailyPlanRepository'

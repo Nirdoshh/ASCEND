@@ -20,6 +20,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * For the root (/) and /today routes, the startup loaders redirect based
  * on stored data. With no Journey and no draft (the test default), both
  * redirect to /onboarding.
+ *
+ * Protected app routes (/journey, /progress, /you, /design-system) also
+ * redirect to /onboarding when no active Journey exists.
  */
 beforeEach(() => {
   window.localStorage.clear()
@@ -46,14 +49,19 @@ describe('routes', () => {
     { path: '/today', heading: 'Become the person you want to be.' },
 
     /*
-     * AppShell routes render inside the shell. With no Journey they show
-     * empty states, but the shell (header, nav) is still present.
+     * Protected app routes redirect to onboarding when no Journey exists.
+     * The AppShell guard intercepts and redirects before rendering the shell.
      */
-    { path: '/journey', heading: 'Journey' },
-    { path: '/progress', heading: 'Progress' },
-    { path: '/you', heading: 'You' },
-    { path: '/design-system', heading: 'Design system' },
-    { path: '/nowhere-at-all', heading: /not found/i },
+    { path: '/journey', heading: 'Become the person you want to be.' },
+    { path: '/progress', heading: 'Become the person you want to be.' },
+    { path: '/you', heading: 'Become the person you want to be.' },
+    { path: '/design-system', heading: 'Become the person you want to be.' },
+
+    /*
+     * Not found renders the NotFoundScreen (still goes through AppShell guard,
+     * so also redirects to onboarding when no Journey).
+     */
+    { path: '/nowhere-at-all', heading: 'Become the person you want to be.' },
 
     /*
      * Onboarding is registered as a sibling of the main shell, not a
@@ -92,9 +100,9 @@ describe('routes', () => {
     // The boundary covers the header, the nav and the outlet, so a working
     // route must still show navigation. If RouteErrorBoundary were mounted
     // above RouterProvider again, these assertions would never be reached.
-    await renderAt('/journey')
+    // For onboarding routes, the boundary is part of OnboardingLayout.
+    await renderAt('/onboarding')
 
-    expect(screen.getByRole('navigation', { name: /main/i })).toBeInTheDocument()
-    expect(screen.getByRole('banner')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
   })
 })

@@ -1,12 +1,12 @@
 import { Navigate, useLoaderData } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 
-import { ASCEND_JOURNEY_KEY, ASCEND_ONBOARDING_DRAFT_KEY } from '../data/storage/keys'
-import { normalizeJourney, hasNewerJourneySchema } from '../domain/journey'
-import { migrateAndNormalizeDraft } from '../data/repositories/onboardingDraftRepository'
+import { AppShell } from './AppShell'
+
+import { createJourneyRepository } from '../data/repositories/journeyRepository'
+import { createOnboardingDraftRepository } from '../data/repositories/onboardingDraftRepository'
+import { createWebStorageStore } from '../data/storage'
 import { resolveStartupDestination, resolveTodayDestination } from '../application/startup'
-import type { JourneyRepository } from '../data/repositories/journeyRepository'
-import type { OnboardingDraftRepository } from '../data/repositories/onboardingDraftRepository'
 
 /**
  * Loader data for the startup redirect.
@@ -16,67 +16,26 @@ type StartupLoaderData = {
 }
 
 /**
- * Reads the active journey directly from localStorage.
- * This bypasses the repository abstraction to avoid store initialization issues
- * during router loader execution in test environments.
+ * Creates a JourneyRepository using the real Web Storage store.
+ * This is used by route loaders to check for an active journey.
  */
-function loadActiveJourneyDirect(): ReturnType<typeof normalizeJourney> {
-  try {
-    const raw = window.localStorage.getItem(ASCEND_JOURNEY_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (hasNewerJourneySchema(parsed)) return null
-    return normalizeJourney(parsed, new Date().toISOString())
-  } catch {
-    return null
-  }
+function createJourneyCheckRepository() {
+  return createJourneyRepository(createWebStorageStore())
 }
 
 /**
- * Reads the onboarding draft directly from localStorage.
- * This bypasses the repository abstraction to avoid store initialization issues
- * during router loader execution in test environments.
+ * Creates an OnboardingDraftRepository using the real Web Storage store.
+ * This is used by route loaders to check for an onboarding draft.
  */
-function loadOnboardingDraftDirect(): ReturnType<typeof migrateAndNormalizeDraft> {
-  try {
-    const raw = window.localStorage.getItem(ASCEND_ONBOARDING_DRAFT_KEY)
-    return migrateAndNormalizeDraft(raw)
-  } catch {
-    return null
-  }
-}
-
-/**
- * Creates a minimal JourneyRepository that only implements loadActive.
- * This is used by the startup loaders to check for an active journey.
- */
-function createJourneyCheckRepository(): JourneyRepository {
-  return {
-    loadActive: loadActiveJourneyDirect,
-    save: () => 'unavailable' as const,
-    clear: () => {},
-    isAvailable: () => true,
-  }
-}
-
-/**
- * Creates a minimal OnboardingDraftRepository that only implements load.
- * This is used by the startup loaders to check for an onboarding draft.
- */
-function createDraftCheckRepository(): OnboardingDraftRepository {
-  return {
-    load: loadOnboardingDraftDirect,
-    save: () => 'unavailable' as const,
-    clear: () => {},
-    isAvailable: () => true,
-  }
+function createDraftCheckRepository() {
+  return createOnboardingDraftRepository(createWebStorageStore())
 }
 
 /**
  * Loader for the root route (`/`).
  *
  * Runs synchronously on every cold load and refresh of `/`.
- * Decides where the user should go based on stored data.
+ * Redirects to /today if Journey exists, otherwise to onboarding.
  */
 export function rootLoader(): StartupLoaderData {
   return {
@@ -91,9 +50,24 @@ export function rootLoader(): StartupLoaderData {
  * Loader for the `/today` route.
  *
  * Runs synchronously on every cold load and refresh of `/today`.
- * Redirects to onboarding if no active Journey exists.
+ * If Journey exists, allows access (renders TodayScreen in AppShell).
+ * Otherwise redirects to onboarding/resume.
  */
 export function todayLoader(): StartupLoaderData {
+  const journeyRepo = createJourneyCheckRepository()
+  const draftRepo = createDraftCheckRepository()
+  return {
+    destination: resolveTodayDestination(journeyRepo, draftRepo),
+  }
+}
+
+/**
+ * Loader for protected AppShell routes (journey, progress, you).
+ *
+ * If no active Journey, redirects to onboarding/resume.
+ * If Journey exists, allows access.
+ */
+export function appShellRouteLoader(): StartupLoaderData {
   return {
     destination: resolveTodayDestination(
       createJourneyCheckRepository(),
@@ -105,12 +79,30 @@ export function todayLoader(): StartupLoaderData {
 const TodayScreen = lazy(() => import('../features/today/TodayScreen').then((m) => ({ default: m.TodayScreen })))
 
 /**
- * Root route element (AppShell's index child).
+ * Root route element (`/`).
  *
- * Reads the loader decision and either renders TodayScreen (if Journey exists)
+ * Reads the loader decision and either redirects to /today (if Journey exists)
  * or redirects to onboarding.
  */
 export function RootRedirect() {
+  const { destination } = useLoaderData<StartupLoaderData>()
+
+  switch (destination.kind) {
+    case 'today':
+      return <Navigate to="/today" replace />
+    case 'onboarding':
+    case 'onboarding-resume':
+      return <Navigate to={destination.path} replace />
+  }
+}
+
+/**
+ * Today route element (`/today`).
+ *
+ * If Journey exists, renders TodayScreen (via Suspense for lazy load).
+ * If no Journey, redirects to onboarding/resume.
+ */
+export function TodayRedirect() {
   const { destination } = useLoaderData<StartupLoaderData>()
 
   switch (destination.kind) {
@@ -127,17 +119,19 @@ export function RootRedirect() {
 }
 
 /**
- * Today route element (top-level /today route).
+ * AppShell route guard element.
  *
- * Reads the loader decision and either redirects to / (AppShell's index)
- * or redirects to onboarding.
+ * Protects all child routes of AppShell (today, journey, progress, you).
+ * If no active Journey, redirects to onboarding/resume.
+ * If Journey exists, renders AppShell (which contains an Outlet for child routes).
  */
-export function TodayRedirect() {
+export function AppShellGuard() {
   const { destination } = useLoaderData<StartupLoaderData>()
 
   switch (destination.kind) {
     case 'today':
-      return <Navigate to="/" replace />
+      // Journey exists - render AppShell (which contains its own Outlet)
+      return <AppShell />
     case 'onboarding':
     case 'onboarding-resume':
       return <Navigate to={destination.path} replace />

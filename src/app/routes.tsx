@@ -1,6 +1,5 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 
-import { AppShell } from './AppShell'
 import { DesignSystemScreen } from '../features/designsystem/DesignSystemScreen'
 import { DurationScreen } from '../features/onboarding/DurationScreen'
 import { EffortScreen } from '../features/onboarding/EffortScreen'
@@ -15,40 +14,74 @@ import { JourneyScreen } from '../features/journey/JourneyScreen'
 import { ProgressScreen } from '../features/progress/ProgressScreen'
 import { YouScreen } from '../features/you/YouScreen'
 import { NotFoundScreen } from '../features/notfound/NotFoundScreen'
-import { rootLoader, todayLoader, RootRedirect, TodayRedirect } from './StartupRedirect'
+import {
+  rootLoader,
+  todayLoader,
+  appShellRouteLoader,
+  RootRedirect,
+  TodayRedirect,
+  AppShellGuard,
+} from './StartupRedirect'
 
 /**
  * Routing.
  *
- * The AppShell route owns the header and navigation. Its index child (/)
- * runs a startup loader to decide whether to show Today or redirect to
- * onboarding. The /today route has its own loader for direct access.
+ * The routing hierarchy:
  *
- * Onboarding is a SIBLING of AppShell, not a child of it. Someone who has
- * not picked a Growth Area has no Journey yet, so the four-screen
- * navigation would be four empty screens promising things that do not exist.
+ * 1. Root route (/) - decides whether to go to /today or /onboarding
+ * 2. /today route (TOP-LEVEL) - runs loader to check for Journey, renders TodayRedirect
+ * 3. AppShell with guard - protects journey, progress, you routes
+ * 4. Onboarding - sibling of AppShell, always accessible
+ *
+ * The /today route MUST come before AppShell so that direct navigation
+ * to /today runs its loader before the AppShell layout route matches.
  *
  * `not_found_handling: "single-page-application"` in wrangler.jsonc makes
  * a deep link to /journey reach this client router on a cold load.
  */
 export const router = createBrowserRouter([
   /*
-   * Main application shell — the root layout.
+   * Root route: decides where a user landing on / should go.
    *
-   * Its index child (/) runs the startup loader to decide the destination.
+   * Redirects to /today if Journey exists, otherwise to /onboarding.
    */
   {
     path: '/',
-    element: <AppShell />,
-    children: [
-      /*
-       * Index route: decides where a user landing on / should go.
-       *
-       * The loader runs synchronously on every cold load and refresh.
-       * The element performs the redirect based on the loader's decision.
-       */
-      { index: true, loader: rootLoader, element: <RootRedirect /> },
+    loader: rootLoader,
+    element: <RootRedirect />,
+  },
 
+  /*
+   * /today route (TOP-LEVEL): handles direct access to /today.
+   *
+   * Runs its own loader (todayLoader) to check for Journey.
+   * If Journey exists, renders TodayRedirect which shows TodayScreen.
+   * If no Journey, redirects to onboarding/resume.
+   *
+   * This MUST come before AppShell so that direct navigation to /today
+   * runs its loader before the AppShell layout route matches.
+   */
+  {
+    path: '/today',
+    loader: todayLoader,
+    element: <TodayRedirect />,
+  },
+
+  /*
+   * Main application shell with route guard.
+   *
+   * The loader checks for active Journey. If none exists, redirects to
+   * onboarding/resume. The AppShellGuard element either renders AppShell
+   * with the child outlet (Journey exists) or redirects (no Journey).
+   *
+   * This single guard protects all child routes: journey, progress, you.
+   */
+  {
+    loader: appShellRouteLoader,
+    // AppShellGuard is the direct element, so it has access to loader data
+    // It renders AppShell with an Outlet inside for child routes
+    element: <AppShellGuard />,
+    children: [
       { path: 'journey', element: <JourneyScreen /> },
       { path: 'progress', element: <ProgressScreen /> },
       { path: 'you', element: <YouScreen /> },
@@ -59,29 +92,8 @@ export const router = createBrowserRouter([
        */
       { path: 'design-system', element: <DesignSystemScreen /> },
 
-      /*
-       * Alias for /today — redirects to the index route.
-       * This is a child of AppShell so it renders inside the shell.
-       */
-      { path: 'today', element: <Navigate to="/" replace /> },
-
       { path: '*', element: <NotFoundScreen /> },
     ],
-  },
-
-  /*
-   * /today route: decides whether direct access to /today is allowed.
-   *
-   * If an active Journey exists, redirects to / (which renders TodayScreen
-   * inside AppShell). If not, redirects to onboarding/resume.
-   *
-   * This is a TOP-LEVEL route (sibling of AppShell) so it can run its
-   * loader before entering the shell.
-   */
-  {
-    path: '/today',
-    loader: todayLoader,
-    element: <TodayRedirect />,
   },
 
   /*

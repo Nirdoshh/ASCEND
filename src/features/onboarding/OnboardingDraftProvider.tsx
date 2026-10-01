@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import { createOnboardingDraftRepository } from '../../data/repositories'
 import type { OnboardingDraftRepository } from '../../data/repositories'
-import { createJourneyRepository } from '../../data/repositories/journeyRepository'
-import type { JourneyRepository } from '../../data/repositories/journeyRepository'
-import { createWebStorageStore, type StoreWriteResult } from '../../data/storage'
+import type { JourneyRepository } from '../../data/repositories'
+import {
+  defaultOnboardingDraftRepository,
+  defaultJourneyRepository,
+} from '../../data/repositories/defaults'
+import { type StoreWriteResult } from '../../data/storage'
 import { createGrowthAreaId } from '../../domain/growthAreaId'
 import {
   createCustomGrowthArea,
@@ -33,21 +35,6 @@ import { createMilestoneId } from '../../domain/milestone'
 import type { OnboardingDraft, OnboardingStep } from '../../domain/onboardingDraft'
 import { finalizeOnboarding, getValidationDetails, getIncompleteSteps } from '../../application/finalizeOnboarding'
 import type { FinalizeResult } from '../../application/finalizeOnboarding'
-
-/**
- * The repository onboarding uses by default.
- *
- * The same one-line seam as preferences: replace this factory in Phase
- * 11 with one that talks to the Worker API and no screen changes.
- */
-export const defaultOnboardingDraftRepository: OnboardingDraftRepository =
-  createOnboardingDraftRepository(createWebStorageStore())
-
-/**
- * The Journey repository onboarding uses by default.
- */
-export const defaultJourneyRepository: JourneyRepository =
-  createJourneyRepository(createWebStorageStore())
 
 export interface OnboardingContextValue {
   /** null means "this person has not started yet". */

@@ -1,0 +1,55 @@
+/**
+ * Today screen styles.
+ */
+
+.today {
+  padding: var(--space-4);
+}
+
+.today__journey-info {
+  margin-bottom: var(--space-4);
+}
+
+.today__journey-label {
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-1);
+}
+
+.today__journey-goal {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.today__plan-ready {
+  text-align: center;
+  padding: var(--space-6) var(--space-4);
+}
+
+.today__plan-ready__icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-3);
+}
+
+.today__plan-ready__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.today__plan-ready__description {
+  color: var(--color-muted);
+  margin-bottom: var(--space-4);
+}
+
+.today__plan-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  background: var(--color-surface);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
