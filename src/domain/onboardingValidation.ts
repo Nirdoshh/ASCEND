@@ -18,6 +18,25 @@
  * So validity is computed from the DATA, per step, by a named function
  * per step. `currentStep` never appears in any of them.
  *
+ * THE THREE DISTINCTIONS, AND WHICH FUNCTION OWNS EACH
+ *
+ *   field presence        -> ANSWERED.  "There is a Goal for ga_c_ab12."
+ *   step validator        -> VALID.     "That Goal is good enough to
+ *                                         start a Journey."
+ *   currentStep           -> RESUME.    "Send them back to this screen."
+ *
+ * These are three different questions with three different answers, and
+ * conflating any pair of them produces a bug. Conflating presence with
+ * validity lets an unusable answer through; conflating currentStep with either
+ * lets a corrupt draft masquerade as a finished one.
+ *
+ * So presence alone never satisfies a step. A step with an answer that cannot
+ * be honoured is `unresolvable`, not valid — the answer is still there, and the
+ * user is asked to resolve it rather than having it treated as done or thrown
+ * away. That is the same product rule that keeps later draft data when its
+ * Growth Area is deselected: user-entered work is never deleted to make the
+ * state tidier.
+ *
  * WHO CALLS THIS
  *
  * Domain code and the future application service. React components must

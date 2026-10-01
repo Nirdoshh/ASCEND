@@ -129,8 +129,9 @@ docs/adr/                0001 Cloudflare Worker, 0002 repository interfaces,
                          0003 CSS tokens, 0004 no DB/auth in V1,
                          0005 single Preferences object,
                          0006 toolchain versions (TS 6 / ESLint 9),
-                         0007 opaque Growth Area ids,
-                         0008 currentStep is navigation only
+                         0007 opaque Growth Area ids, in three namespaces,
+                         0008 currentStep is navigation only,
+                         0009 unresolved references are kept, not deleted
 ```
 
 ## Design system

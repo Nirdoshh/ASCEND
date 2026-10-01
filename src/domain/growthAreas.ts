@@ -33,7 +33,7 @@
  * the type means we cannot drift into building them by accident.
  */
 
-import { GROWTH_AREA_ID_PREFIX } from './growthAreaId'
+import { suggestedGrowthAreaId } from './growthAreaId'
 import { normalizeGrowthAreaName, toGrowthAreaDisplayName } from './growthAreaName'
 
 export type GrowthAreaKind = 'suggested' | 'custom'
@@ -81,7 +81,7 @@ const SUGGESTED: ReadonlyArray<readonly [slug: string, name: string]> = [
  * file comment.
  */
 export const SUGGESTED_GROWTH_AREAS: readonly GrowthArea[] = SUGGESTED.map(([slug, name]) => ({
-  id: GROWTH_AREA_ID_PREFIX + slug,
+  id: suggestedGrowthAreaId(slug),
   name,
   normalizedName: normalizeGrowthAreaName(name),
   kind: 'suggested' as const,

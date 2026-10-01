@@ -37,6 +37,27 @@
  * are pure projections over exactly one key. Phase 2B's Goal is recorded
  * *against* an area id too, so deselecting in step 2 leaves a Goal
  * written in step 3 untouched and available if the user comes back.
+ *
+ * WHAT HAPPENS WHEN A LATER ANSWER IS ORPHANED
+ *
+ * Confirmed product rule: if a user deselects a Growth Area that later
+ * draft data refers to, the later data is KEPT and the reference is marked
+ * unresolved. At Summary the user must explicitly choose one of:
+ *
+ *   restore the Growth Area · assign another one · edit the dependent item
+ *   · intentionally remove it
+ *
+ * Nothing is ever deleted to tidy this up. An orphaned Goal is a sentence
+ * somebody typed; silently dropping it because a chip was deselected is
+ * exactly the "never punish the user" failure the product rules forbid.
+ *
+ * The mechanism is deliberately not built yet, because there is no later data
+ * to orphan — `goal` and everything after it are absent from the type on
+ * purpose (see above), and inventing an empty resolution state now would be
+ * structure with no content. What is locked in here is the shape of the
+ * decision: answers are keyed by area id, so an id reference is the only thing
+ * that can be orphaned, and `reconcileSelections` below is deliberately NOT
+ * extended to touch dependent data when that data arrives.
  */
 
 import { MAX_GROWTH_AREA_NAME_LENGTH, mergeGrowthAreas } from './growthAreas'
@@ -46,9 +67,13 @@ import type { GrowthArea } from './growthAreas'
 
 /**
  * Bumped when the stored shape changes. See onboardingDraftRepository.ts
- * for the migration that carries v1 drafts forward.
+ * for the migrations that carry older drafts forward.
+ *
+ *   1  Phase 2A.  Ids WERE normalized names.
+ *   2  Ids became opaque, but shared one `ga_` prefix.
+ *   3  Ids gained explicit per-origin namespaces: ga_s_ / ga_c_ / ga_m_.
  */
-export const ONBOARDING_SCHEMA_VERSION = 2
+export const ONBOARDING_SCHEMA_VERSION = 3
 
 /**
  * The full ordered list of onboarding steps.

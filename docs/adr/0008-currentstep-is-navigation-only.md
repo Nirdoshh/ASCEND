@@ -25,7 +25,7 @@ Every way it stops being true is a real thing that happens:
 
 **`currentStep` is for navigation and resume position. Nothing else.**
 
-Two rules follow, and both are enforced by tests:
+Three rules follow, and all are enforced by tests:
 
 1. **Validity is never inferred from `currentStep`.** Each step has its own
    domain validator, and `validateOnboardingDraft(draft)` is the single gate for
@@ -34,6 +34,18 @@ Two rules follow, and both are enforced by tests:
    ask about *its own* step, through that step's validator, to decide whether its
    own button is enabled. It may not re-implement the rules or decide that
    onboarding is complete.
+3. **Three questions, three functions.** Conflating any pair of them produces a
+   bug, so each has one owner:
+
+   | Question | Answered by | Function |
+   | --- | --- | --- |
+   | Is there an answer here? | field presence | (per-field check) |
+   | Is it good enough to start a Journey? | the step's rule | `isGrowthAreaStepValid` |
+   | Where should they be sent back to? | `currentStep` | `resumeStep` |
+
+   Presence alone never satisfies a step. An answer that cannot be honoured is
+   `unresolvable`, not valid: the answer is still there, and the user is asked to
+   resolve it rather than having it treated as done or thrown away (ADR 0009).
 
 ```ts
 isGrowthAreaStepValid(draft)  // one per step, named for the step
@@ -92,3 +104,4 @@ answered and 2 is not.
 - `src/domain/onboardingValidation.ts` — `STEP_VALIDATORS`, `validateOnboardingDraft`
 - `src/domain/onboardingDraft.ts` — `resumeStep`, the only reader of `currentStep`
 - ADR 0007 — why ids must resolve before validity means anything
+- ADR 0009 — why an unresolvable answer is kept rather than dropped

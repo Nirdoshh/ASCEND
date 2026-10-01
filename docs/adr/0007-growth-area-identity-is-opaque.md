@@ -43,9 +43,11 @@ Rules that follow:
 2. **Duplicates are compared by `normalizedName`**, so `Digital Marketing`,
    `digital marketing` and `DIGITAL   MARKETING` are still one area.
 3. **Renaming changes `name` and `normalizedName` and leaves `id` alone.**
-4. **Suggested areas have hardcoded, hand-written ids** (`ga_fitness`,
-   `ga_communication`, …), pinned by a test. The slug is not computed from the
+4. **Suggested areas have hardcoded, hand-written ids** (`ga_s_fitness`,
+   `ga_s_communication`, …), pinned by a test. The slug is not computed from the
    display name, which is exactly what makes a future rename safe.
+6. **Every id carries the namespace prefix of its origin**, so the three id
+   spaces are disjoint by construction rather than by an incidental property.
 5. **Suggested and custom areas are the same shape with the same behaviour.**
    Nothing downstream can tell them apart, so the suggestion list cannot quietly
    become a limit.
@@ -85,35 +87,45 @@ corruption into a reviewed, deliberate change.
 - `normalizedName` is now stored derived data, so it must never be trusted on
   read. The repository recomputes it from `name` every load.
 - One extra field per area. Cheap, and it is what buys the rename guarantee.
-- Suggested ids look like `ga_communication`, which is indistinguishable in shape
-  from a migrated `ga_<hash>`. Determinism and the differing length matter more
-  than visual distinguishability, so the two spaces are separated by length
-  rather than by prefix.
+- A second schema bump to 3, because the id spaces were separated by suffix
+  length rather than by prefix. See "Id spaces" below.
 
 ## Id spaces
 
 Three ways an id is born, none of which can collide with another:
 
-| Origin | Form | Length | Property |
+| Origin | Prefix | Suffix | Property |
 | --- | --- | --- | --- |
-| Suggested | `ga_` + hand-written slug | varies | pinned by a test |
-| Custom (new) | `ga_` + `crypto.randomUUID()` prefix | 16 chars | 122 bits of entropy |
-| Custom (migrated from v1) | `ga_` + FNV-1a of the old name | 14 chars | deterministic |
+| Suggested | `ga_s_` | hand-written slug | pinned by a test |
+| Custom (new) | `ga_c_` | `crypto.randomUUID()` prefix | 16 chars, 122 bits |
+| Recovered (migrated from v1, or repaired) | `ga_m_` | FNV-1a of the old name | 14 chars, deterministic |
 
-The migrated form is **deterministic on purpose**. A random id generated at
+### Why an explicit prefix per origin
+
+The first version of this ADR gave all three the single prefix `ga_` and relied
+on **suffix length** to keep them apart. That worked by accident rather than by
+design: suggested slugs have variable length, so nothing prevented a future
+suggestion with a 14- or 16-character slug from being read as a custom or
+migrated id. In that world, migrating such a draft would move the suggestion
+into a custom namespace and every stored reference to it would break.
+
+With a distinct prefix per origin, no id can match two namespaces whatever
+follows it. The differing lengths are kept as a cheap cross-check, but nothing
+depends on them any more. A test asserts both properties, and one asserts that a
+14- or 16-character slug is still classified as a suggestion — a case the shipped
+suggestion list cannot produce, which is exactly why it needed its own test.
+
+The recovered form is **deterministic on purpose**. A random id generated at
 migration time would be re-minted on every page load, and the user's selection
 would appear to vanish each time they reopened the app. Hashing is not a return
 to name-derived identity: the result is computed once, stored, and opaque
-forever after.
-
-The differing lengths are what guarantee the random and migrated spaces never
-overlap. `migratedGrowthAreaId` asserts its own length at runtime, and a test
-pins both formats.
+forever after. The same hash is used to rebuild an id that is found missing or
+blank, because that is also a recovery rather than a mint.
 
 ## Related
 
-- `src/domain/growthAreaId.ts` — the three id spaces and why they cannot collide
+- `src/domain/growthAreaId.ts` — the three id namespaces and why they are disjoint
 - `src/domain/growthAreaName.ts` — display vs comparison normalization
 - `src/domain/growthAreas.ts` — `GrowthArea`, `createCustomGrowthArea`, `mergeGrowthAreas`
-- `src/data/repositories/onboardingDraftRepository.ts` — the v1 → v2 migration
+- `src/data/repositories/onboardingDraftRepository.ts` — the v1 → v2 and v2 → v3 migrations
 - ADR 0002 — versioned storage keys and migrations

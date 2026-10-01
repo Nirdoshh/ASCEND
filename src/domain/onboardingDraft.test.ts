@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { migratedGrowthAreaId } from './growthAreaId'
+import { migratedGrowthAreaId, suggestedGrowthAreaId } from './growthAreaId'
 import { normalizeGrowthAreaName } from './growthAreaName'
 import { createCustomGrowthArea, SUGGESTED_GROWTH_AREAS } from './growthAreas'
 import {
@@ -28,7 +28,7 @@ const T1 = '2026-10-01T09:05:00.000Z'
 const T2 = '2026-10-01T09:10:00.000Z'
 
 /** Opaque-looking and name-free, so no test can pass by accident. */
-const PIANO_ID = 'ga_pianofixed01'
+const PIANO_ID = 'ga_c_pianofixed01'
 
 const PIANO: DraftGrowthArea = {
   id: PIANO_ID,
@@ -36,8 +36,23 @@ const PIANO: DraftGrowthArea = {
   normalizedName: 'piano',
 }
 
-const FITNESS = SUGGESTED_GROWTH_AREAS.find((area) => area.id === 'ga_fitness')!
-const READING = SUGGESTED_GROWTH_AREAS.find((area) => area.id === 'ga_reading')!
+/**
+ * A suggested area, looked up by the id it ships with.
+ *
+ * Written as a throwing lookup rather than `find(...)!` so that renaming a
+ * suggested id fails with "no such area: ga_s_fitness" instead of
+ * "cannot read properties of undefined", which tells you nothing about which
+ * of the several ids in these tests went missing.
+ */
+function suggested(id: string) {
+  const area = SUGGESTED_GROWTH_AREAS.find((candidate) => candidate.id === id)
+
+  if (!area) throw new Error(`no such suggested Growth Area: ${id}`)
+  return area
+}
+
+const FITNESS = suggested(suggestedGrowthAreaId('fitness'))
+const READING = suggested(suggestedGrowthAreaId('reading'))
 
 function draftWithPiano(): OnboardingDraft {
   return addCustomGrowthArea(createOnboardingDraft(T0), PIANO, T0)
@@ -82,7 +97,7 @@ describe('selecting and deselecting', () => {
     const draft = selectGrowthArea(createOnboardingDraft(T0), FITNESS.id, T1)
 
     expect(isSelected(draft, FITNESS.id)).toBe(true)
-    expect(draft.selectedGrowthAreaIds).toEqual(['ga_fitness'])
+    expect(draft.selectedGrowthAreaIds).toEqual([FITNESS.id])
     expect(draft.updatedAt).toBe(T1)
     expect(draft.startedAt).toBe(T0)
   })
@@ -92,7 +107,7 @@ describe('selecting and deselecting', () => {
     draft = selectGrowthArea(draft, READING.id, T1)
     draft = selectGrowthArea(draft, FITNESS.id, T2)
 
-    expect(draft.selectedGrowthAreaIds).toEqual(['ga_reading', 'ga_fitness'])
+    expect(draft.selectedGrowthAreaIds).toEqual([READING.id, FITNESS.id])
   })
 
   it('ignores a second selection of the same area', () => {
@@ -184,7 +199,7 @@ describe('deselecting never destroys other work', () => {
 
     const after = deselectGrowthArea(draft, FITNESS.id, T2)
 
-    expect(after.selectedGrowthAreaIds).toEqual([PIANO_ID, 'ga_reading'])
+    expect(after.selectedGrowthAreaIds).toEqual([PIANO_ID, READING.id])
   })
 })
 
@@ -348,10 +363,10 @@ describe('reconcileSelections', () => {
   it('drops selections that name an unknown area', () => {
     const draft: OnboardingDraft = {
       ...selectGrowthArea(createOnboardingDraft(T0), FITNESS.id, T0),
-      selectedGrowthAreaIds: ['ga_fitness', 'ga_retiredina-later-build'],
+      selectedGrowthAreaIds: [FITNESS.id, 'ga_retiredina-later-build'],
     }
 
-    expect(reconcileSelections(draft).selectedGrowthAreaIds).toEqual(['ga_fitness'])
+    expect(reconcileSelections(draft).selectedGrowthAreaIds).toEqual([FITNESS.id])
   })
 
   it('drops a selection that holds a name rather than an id', () => {

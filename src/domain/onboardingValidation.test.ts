@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { suggestedGrowthAreaId } from './growthAreaId'
 import { SUGGESTED_GROWTH_AREAS } from './growthAreas'
 import {
   addCustomGrowthArea,
@@ -18,8 +19,18 @@ import {
 
 const T0 = '2026-10-01T09:00:00.000Z'
 
-const FITNESS = SUGGESTED_GROWTH_AREAS.find((area) => area.id === 'ga_fitness')!
-const READING = SUGGESTED_GROWTH_AREAS.find((area) => area.id === 'ga_reading')!
+/** A suggested area, looked up by the id it ships with. See the note in
+ * onboardingDraft.test.ts: a throwing lookup names the missing id, where
+ * `find(...)!` only says "cannot read properties of undefined". */
+function suggested(id: string) {
+  const area = SUGGESTED_GROWTH_AREAS.find((candidate) => candidate.id === id)
+
+  if (!area) throw new Error(`no such suggested Growth Area: ${id}`)
+  return area
+}
+
+const FITNESS = suggested(suggestedGrowthAreaId('fitness'))
+const READING = suggested(suggestedGrowthAreaId('reading'))
 
 function withFitness(): OnboardingDraft {
   return selectGrowthArea(createOnboardingDraft(T0), FITNESS.id, T0)
