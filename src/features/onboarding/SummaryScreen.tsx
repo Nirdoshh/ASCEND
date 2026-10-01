@@ -25,7 +25,7 @@ import './SummaryScreen.css'
  */
 export function SummaryScreen() {
   const navigate = useNavigate()
-  const { draft, areas, getValidationDetails, getIncompleteSteps, finalize } = useOnboarding()
+  const { draft, areas, getValidationDetails, getIncompleteSteps, finalize, hasActiveJourney } = useOnboarding()
 
   const [submitting, setSubmitting] = useState(false)
   const [finalizeError, setFinalizeError] = useState<string | undefined>(undefined)
@@ -51,6 +51,23 @@ export function SummaryScreen() {
   }
 
   if (!draft) {
+    const activeJourney = hasActiveJourney()
+
+    if (activeJourney) {
+      return (
+        <div className="summary">
+          <ScreenHeader title="Your Journey">
+            <p>Your Journey has already started.</p>
+          </ScreenHeader>
+          <div className="summary__actions">
+            <Button variant="primary" size="lg" fullWidth onClick={() => void navigate('/today')}>
+              Go to Today
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className="summary">
         <ScreenHeader title="Your Journey">

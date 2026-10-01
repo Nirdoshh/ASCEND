@@ -33,10 +33,42 @@ import './WelcomeScreen.css'
  * everyone to step 2, which quietly threw away the Goal and the WHY for
  * anyone who had answered them. See resume.ts for how the destination is
  * worked out.
+ *
+ * JOURNEY ALREADY STARTED:
+ *
+ * If an active Journey exists (V1 allows only one), the welcome screen
+ * must not invite the user to start another. Instead it shows a clear
+ * path to Today.
  */
 export function WelcomeScreen() {
   const navigate = useNavigate()
-  const { draft, begin } = useOnboarding()
+  const { draft, begin, hasActiveJourney } = useOnboarding()
+
+  // If an active Journey exists, the user cannot start another onboarding.
+  // Show a clear path to Today instead.
+  const activeJourney = hasActiveJourney()
+
+  if (activeJourney) {
+    return (
+      <div className="welcome">
+        <p className="welcome__wordmark">ASCEND</p>
+
+        <h1 className="welcome__title">Your Journey has already started.</h1>
+
+        <p className="welcome__lead">You have an active Journey.</p>
+
+        <div className="onboarding__actions">
+          <Button variant="primary" size="lg" fullWidth onClick={() => void navigate('/today')}>
+            Go to Today
+          </Button>
+
+          <p className="welcome__footnote text-sm text-muted">
+            V1 supports one active Journey. Finish or delete it before starting a new one.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   // A draft existing is not the same as a draft holding any answers.
   // Someone who pressed the first button and then closed the tab has a

@@ -114,6 +114,8 @@ export interface OnboardingContextValue {
   getIncompleteSteps(): ReturnType<typeof getIncompleteSteps>
   /** Runs the finalization: validate → create Journey → save Journey → clear draft. */
   finalize(now?: string): Promise<FinalizeResult>
+  /** True when an active Journey already exists in storage. */
+  hasActiveJourney(): boolean
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null)
@@ -332,6 +334,10 @@ export function OnboardingDraftProvider({
     return getIncompleteSteps(repository)
   }, [repository])
 
+  const hasActiveJourneyFn = useCallback(() => {
+    return journeyRepository.loadActive() !== null
+  }, [journeyRepository])
+
   const finalizeFn = useCallback(
     async (now?: string): Promise<FinalizeResult> => {
       return finalizeOnboarding(repository, journeyRepository, now ?? new Date().toISOString())
@@ -367,6 +373,7 @@ export function OnboardingDraftProvider({
       getValidationDetails: getValidationDetailsFn,
       getIncompleteSteps: getIncompleteStepsFn,
       finalize: finalizeFn,
+      hasActiveJourney: hasActiveJourneyFn,
     }
   }, [
     draft,
@@ -385,6 +392,7 @@ export function OnboardingDraftProvider({
     getValidationDetailsFn,
     getIncompleteStepsFn,
     finalizeFn,
+    hasActiveJourneyFn,
   ])
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>
