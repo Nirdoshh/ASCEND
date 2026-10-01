@@ -1,6 +1,7 @@
 # ADR 0010 — The Goal and the WHY are Journey-level answers, not keyed by Growth Area
 
-- **Status:** Accepted (Phase 2B)
+- **Status:** Accepted (Phase 2B) — the schema-version position at the end of
+  this document is **corrected by ADR 0011**
 - **Date:** 2026-10-01
 
 ## Context
@@ -80,9 +81,10 @@ deselecting the only selected area.
 
 - Deselecting an area cannot orphan, hide or destroy a Goal or a WHY.
 - No per-area resolution UI is needed for these two steps, now or at Summary.
-- The storage shape stays small: adding the fields needed **no** schema bump and
-  **no** migration (see below), because a draft written by an earlier build
-  simply has no such keys, which is exactly the "unanswered" representation.
+- The storage shape stays small: the two fields are optional and unkeyed, and a
+  draft written by an earlier build simply has no such keys, which is exactly
+  the "unanswered" representation. (The original claim that this needed **no**
+  schema bump was wrong; see the corrected section below and ADR 0011.)
 
 **Bad / accepted costs**
 
@@ -100,9 +102,22 @@ deselecting the only selected area.
   them — but it does mean a stale-sounding Goal can survive. The user can edit
   it at any time, which is the intended remedy.
 
-## No schema version bump, on purpose
+## No schema version bump, on purpose — CORRECTED
 
-`ONBOARDING_SCHEMA_VERSION` stays **3**.
+> **Corrected by ADR 0011.** The reasoning below was wrong on its central
+> factual claim, and the decision was reversed: `ONBOARDING_SCHEMA_VERSION` is
+> now **4**. It is kept here as the record of a decision made with the
+> information available, not as guidance.
+
+The claim was that a v3 build reading a v3 draft containing `goal` and `why`
+"ignores them, and behaves exactly as before". It does not. The v3 reader
+rebuilds the draft from the six keys it knows, so the next normal write — a tap
+on an area, a keystroke in a Goal — deletes both fields. That was measured by
+running the real v3 code from commit `112d82d` against a v3 draft containing
+them, not inferred. ADR 0011 records the proof and the fail-safe rule that
+replaced the assumption.
+
+The original text follows, verbatim.
 
 Adding two optional fields is not a shape change an earlier build would
 misinterpret: a v3 build without these fields reads a draft that has them,
@@ -124,3 +139,5 @@ would get **wrong**, and this is not one.
 - ADR 0008 — `currentStep` is navigation only
 - ADR 0009 — unresolved references are kept, not deleted (still binding; this ADR
   narrows its scope rather than overriding its rule)
+- ADR 0011 — a draft from a newer build is never overwritten (corrects the
+  schema-version section of this ADR)

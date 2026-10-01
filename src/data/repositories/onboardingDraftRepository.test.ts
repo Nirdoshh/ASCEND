@@ -12,9 +12,11 @@ import { ASCEND_ONBOARDING_DRAFT_KEY } from '../storage/keys'
 import {
   classifyV2GrowthAreaId,
   createOnboardingDraftRepository,
+  hasNewerSchema,
   migrateAndNormalizeDraft,
   migrateDraftV1ToV2,
   migrateDraftV2ToV3,
+  migrateDraftV3ToV4,
   ONBOARDING_DRAFT_MIGRATIONS,
 } from './onboardingDraftRepository'
 
@@ -70,43 +72,36 @@ describe('migrateAndNormalizeDraft', () => {
     expect(migrateAndNormalizeDraft({ selectedGrowthAreaIds: ['ga_fitness'] }, NOW)).toBeNull()
   })
 
-  it('keeps what it understands from a future version', () => {
-    // Newer data opened by an older build must not be thrown away: the
-    // user really did answer those questions in a newer app. The ids use the
-    // current namespaces, because a future version is built on top of this
-    // one and can only know the namespaces this one defines.
+  it('REFUSES a draft from a future version, rather than rewriting it as an older one', () => {
+    // The rule that replaced "keep what you understand from a newer
+    // version". That looked generous and was destructive: normalising
+    // rebuilds the draft from the keys THIS build knows, so writing it back
+    // DELETES the fields a newer build added. Refusing loses nothing —
+    // nothing is written, and the newer build still reads the same bytes.
     const result = migrateAndNormalizeDraft(
       {
         schemaVersion: 99,
         currentStep: 'growth-areas',
         selectedGrowthAreaIds: [suggestedGrowthAreaId('fitness')],
         customGrowthAreas: [{ id: 'ga_c_x', name: 'Piano', normalizedName: 'piano' }],
-        goal: 'play a Chopin nocturne',
+        goal: { text: 'play a Chopin nocturne' },
         startedAt: NOW,
         updatedAt: LATER,
       },
       NOW,
     )
 
-    expect(result?.selectedGrowthAreaIds).toEqual([suggestedGrowthAreaId('fitness')])
-    expect(result?.customGrowthAreas).toEqual([
-      { id: 'ga_c_x', name: 'Piano', normalizedName: 'piano' },
-    ])
-    expect(result?.currentStep).toBe('growth-areas')
-    expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
-    // A bare string is not this build's shape, but it is a shape ASCEND has
-    // plausibly stored, and the sentence is the user's. Adopting it is the
-    // difference between an older build losing a Goal and keeping it.
-    expect(result?.goal).toEqual({ text: 'play a Chopin nocturne' })
+    expect(result).toBeNull()
   })
 
-  it('drops a field from a future version that this build has no concept of', () => {
-    // The other half of the rule above. Adopting a shape we recognise is
-    // leniency; inventing one we do not is how a draft acquires a field
-    // that nothing validates, nothing displays and nothing can trust.
+  it('drops a field it has no concept of, at its OWN version too', () => {
+    // Adopting a shape we recognise is leniency; inventing one we do not is
+    // how a draft acquires a field that nothing validates, nothing displays
+    // and nothing can trust. `milestones` is a real future field, so it is
+    // the honest example even in a current-version draft.
     const result = migrateAndNormalizeDraft(
       {
-        schemaVersion: 99,
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
         currentStep: 'goal',
         selectedGrowthAreaIds: [],
         customGrowthAreas: [],
@@ -117,6 +112,7 @@ describe('migrateAndNormalizeDraft', () => {
       NOW,
     )
 
+    expect(result).not.toBeNull()
     expect(result).not.toHaveProperty('milestones')
   })
 
@@ -167,10 +163,12 @@ describe('migrateAndNormalizeDraft', () => {
     expect(result).not.toHaveProperty('why')
   })
 
-  it('adopts a bare-string why, which is a shape an older build stored', () => {
+  it('adopts a bare-string answer, because the sentence is still the user’s', () => {
+    // A bare string is not this build's shape, but rejecting it would throw
+    // away a sentence a person typed over a formatting technicality.
     const result = migrateAndNormalizeDraft(
       {
-        schemaVersion: 99,
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
         currentStep: 'goal',
         selectedGrowthAreaIds: [],
         customGrowthAreas: [],
@@ -348,9 +346,10 @@ describe('migrateAndNormalizeDraft', () => {
 
 describe('the migration registry', () => {
   it('is keyed by the version each migration upgrades FROM, in order', () => {
-    expect(Object.keys(ONBOARDING_DRAFT_MIGRATIONS)).toEqual(['1', '2'])
+    expect(Object.keys(ONBOARDING_DRAFT_MIGRATIONS)).toEqual(['1', '2', '3'])
     expect(ONBOARDING_DRAFT_MIGRATIONS[1]).toBe(migrateDraftV1ToV2)
     expect(ONBOARDING_DRAFT_MIGRATIONS[2]).toBe(migrateDraftV2ToV3)
+    expect(ONBOARDING_DRAFT_MIGRATIONS[3]).toBe(migrateDraftV3ToV4)
   })
 
   it('has a migration for every version below the current one', () => {
@@ -756,7 +755,7 @@ describe('v2 to v3 migration', () => {
     expect(repository.load()).toEqual(loaded)
   })
 
-  it('walks a v1 draft all the way to v3 without losing anything', () => {
+  it('walks a v1 draft all the way to v4 without losing anything', () => {
     const result = migrateAndNormalizeDraft(phase2ADraft(), NOW)
 
     expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
@@ -770,6 +769,56 @@ describe('v2 to v3 migration', () => {
     for (const value of [null, 'draft', 42, ['x']]) {
       expect(migrateDraftV2ToV3(value)).toBe(value)
     }
+  })
+})
+
+describe('v3 to v4 migration', () => {
+  /** A v3 draft exactly as the 2A.1 build wrote it: no Goal, no WHY. */
+  function v3Draft(overrides: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 3,
+      currentStep: 'growth-areas',
+      selectedGrowthAreaIds: ['ga_s_fitness'],
+      customGrowthAreas: [{ id: 'ga_c_0123456789abcdef', name: 'Piano', normalizedName: 'piano' }],
+      startedAt: NOW,
+      updatedAt: LATER,
+      ...overrides,
+    }
+  }
+
+  it('carries an untouched v3 draft forward, still unanswered', () => {
+    const result = migrateAndNormalizeDraft(v3Draft(), NOW)
+
+    expect(result?.schemaVersion).toBe(ONBOARDING_SCHEMA_VERSION)
+    expect(result?.selectedGrowthAreaIds).toEqual(['ga_s_fitness'])
+    expect(result).not.toHaveProperty('goal')
+    expect(result).not.toHaveProperty('why')
+  })
+
+  it('keeps a Goal and a WHY that Phase 2B stored under the old v3 number', () => {
+    // Phase 2B wrote these two fields for one commit before this number was
+    // corrected, so real v3 drafts exist WITH them. The pass-through must
+    // hand them to normalizeFields rather than treat them as unrecognised.
+    const result = migrateAndNormalizeDraft(
+      v3Draft({ goal: { text: 'Run my first 10K' }, why: { text: 'For my daughter' } }),
+      NOW,
+    )
+
+    expect(result?.goal).toEqual({ text: 'Run my first 10K' })
+    expect(result?.why).toEqual({ text: 'For my daughter' })
+  })
+
+  it('is a pure pass-through', () => {
+    const stored = v3Draft()
+
+    expect(migrateDraftV3ToV4(stored)).toBe(stored)
+  })
+
+  it('is registered, so a v3 draft is not mistaken for an unreconstructable one', () => {
+    // The whole reason the pass-through exists: a missing step drops the
+    // draft and sends the user back to the welcome screen, which would be
+    // every existing user, all at once.
+    expect(ONBOARDING_DRAFT_MIGRATIONS[3]).toBe(migrateDraftV3ToV4)
   })
 })
 
@@ -830,5 +879,51 @@ describe('onboardingDraftRepository', () => {
     const repository = createOnboardingDraftRepository(createWebStorageStore(null))
 
     expect(repository.save(sampleDraft())).toBe('unavailable')
+  })
+})
+
+describe('refusing to overwrite a newer draft', () => {
+  /** A draft from a build with one more schema version than this one. */
+  function newerDraft() {
+    return {
+      schemaVersion: ONBOARDING_SCHEMA_VERSION + 1,
+      currentStep: 'goal',
+      selectedGrowthAreaIds: [],
+      customGrowthAreas: [],
+      goal: { text: 'an answer from a newer build' },
+      why: { text: 'and the reason it matters' },
+      startedAt: NOW,
+      updatedAt: LATER,
+    }
+  }
+
+  it('refuses to save over it, and leaves it byte for byte as it was', () => {
+    // The half that makes refusing SAFE. `load()` returning null shows a
+    // first-run screen, and without this guard the first tap would write a
+    // fresh draft over the newer one — the loss refusing was meant to avoid,
+    // just moved one step later.
+    const raw = JSON.stringify(newerDraft())
+    window.localStorage.setItem(ASCEND_ONBOARDING_DRAFT_KEY, raw)
+
+    const repository = createOnboardingDraftRepository(createWebStorageStore())
+
+    expect(repository.load()).toBeNull()
+    expect(repository.save(createOnboardingDraft(NOW))).toBe('newer-schema')
+    expect(window.localStorage.getItem(ASCEND_ONBOARDING_DRAFT_KEY)).toBe(raw)
+  })
+
+  it('saves normally when the stored draft is not newer', () => {
+    const repository = createOnboardingDraftRepository(createWebStorageStore())
+
+    expect(repository.save(createOnboardingDraft(NOW))).toBe('ok')
+  })
+
+  it('treats absent, corrupt and older values as nothing to protect', () => {
+    // Refusing here would be a bug: there is no newer data to preserve.
+    expect(hasNewerSchema(null)).toBe(false)
+    expect(hasNewerSchema('not a draft')).toBe(false)
+    expect(hasNewerSchema({ schemaVersion: 2 })).toBe(false)
+    expect(hasNewerSchema({ schemaVersion: ONBOARDING_SCHEMA_VERSION })).toBe(false)
+    expect(hasNewerSchema({ schemaVersion: ONBOARDING_SCHEMA_VERSION + 1 })).toBe(true)
   })
 })

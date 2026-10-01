@@ -80,33 +80,36 @@ import type { PersonalAnswer } from './personalAnswer'
 import type { GrowthArea } from './growthAreas'
 
 /**
- * Bumped when a stored draft in the OLD format cannot be read correctly by
- * the new build. See onboardingDraftRepository.ts for the migrations that
- * carry older drafts forward.
+ * Bumped when a stored draft would be read WRONG by a build other than the
+ * one that wrote it — either an old draft the new build cannot reconstruct,
+ * or a new draft an older build would quietly damage.
+ *
+ * See onboardingDraftRepository.ts for the migrations that carry older
+ * drafts forward, and for the rule that stops a newer draft being
+ * overwritten by a build that cannot represent it.
  *
  *   1  Phase 2A.  Ids WERE normalized names.
  *   2  Ids became opaque, but shared one `ga_` prefix.
  *   3  Ids gained explicit per-origin namespaces: ga_s_ / ga_c_ / ga_m_.
+ *   4  The draft carries a Goal and a WHY.
  *
- * WHY ADDING goal AND why DID NOT MAKE IT 4
+ * WHY ADDING goal AND why DID MAKE IT 4
  *
- * Two reasons, and the second is the one that decided it.
+ * Phase 2B first shipped these fields WITHOUT a bump, on the theory that an
+ * older build would simply ignore a key it had no name for. It does not.
+ * The v3 reader rebuilds the draft from the six keys it knows
+ * (`normalizeFields` in onboardingDraftRepository.ts), so the next normal
+ * write — selecting an area, typing a Goal — DELETES `goal` and `why`. That
+ * was not reasoned about; it was proved by checking out the real v3 code
+ * from commit 112d82d in a worktree and running a v3 draft through it. The
+ * fields did not survive, byte for byte or otherwise.
  *
- * The number exists to force a REWRITE, not to count releases. Bumping it
- * would run every existing draft through a migration with nothing to do —
- * there is no old shape to convert, because an absent optional field is
- * exactly what a draft from the previous build already holds, and
- * `normalizeFields` produces it for free.
- *
- * More importantly, `migrateAndNormalizeDraft` treats a HIGHER stored
- * version as "this build is older than the data" and keeps only the fields
- * it understands. So a v4 written by this build, read by the v3 build still
- * in someone's browser cache, would drop the Goal on the next write. Not
- * bumping means that older build loads it as an ordinary v3 draft and
- * ignores a key it has no name for — the same visible outcome, without a
- * version number falsely claiming the two formats are incompatible.
+ * The number is what makes that legible. This build now refuses to load or
+ * overwrite a draft whose version is higher than it understands, so a v3
+ * build seeing a v4 draft stops rather than rewriting it — and the newer
+ * answers stay on disk for the build that can read them.
  */
-export const ONBOARDING_SCHEMA_VERSION = 3
+export const ONBOARDING_SCHEMA_VERSION = 4
 
 /**
  * The full ordered list of onboarding steps.

@@ -135,7 +135,8 @@ docs/adr/                0001 Cloudflare Worker, 0002 repository interfaces,
                          0007 opaque Growth Area ids, in three namespaces,
                          0008 currentStep is navigation only,
                          0009 unresolved references are kept, not deleted,
-                         0010 the Goal and the WHY are Journey-level
+                         0010 the Goal and the WHY are Journey-level,
+                         0011 a draft from a newer build is never overwritten
 ```
 
 ## Design system

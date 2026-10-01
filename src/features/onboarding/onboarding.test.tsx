@@ -961,23 +961,32 @@ describe('recovering from bad stored data', () => {
     expect(await screen.findByRole('button', { name: /start my journey/i })).toBeInTheDocument()
   })
 
-  it('keeps what it understands from a NEWER version of the app', async () => {
-    // A schema mismatch in the *other* direction must not throw away
-    // answers a person gave to a newer build.
-    renderWithStoredDraft(
-      {
-        schemaVersion: 99,
-        currentStep: 'growth-areas',
-        selectedGrowthAreaIds: [suggestedGrowthAreaId('fitness')],
-        customGrowthAreas: [{ id: 'ga_c_x', name: 'Piano', normalizedName: 'piano' }],
-        goal: 'a goal from a build we do not have',
-      },
-      '/onboarding/areas',
-    )
+  it('never overwrites a draft written by a NEWER version of the app', async () => {
+    // The failure this prevents: an older build loads a newer draft, does
+    // not recognise its fields, and writes the recognised ones back — which
+    // deletes the rest. Refusing is the only safe half; nothing is written,
+    // so the newer build still finds every answer. See ADR 0011.
+    const newer = {
+      schemaVersion: ONBOARDING_SCHEMA_VERSION + 1,
+      currentStep: 'goal',
+      selectedGrowthAreaIds: [suggestedGrowthAreaId('fitness')],
+      customGrowthAreas: [],
+      goal: { text: 'an answer from a newer build' },
+      startedAt: '2026-10-01T09:00:00.000Z',
+      updatedAt: '2026-10-01T09:00:00.000Z',
+    }
+    const user = userEvent.setup()
+    renderWithStoredDraft(newer, '/onboarding/areas')
 
-    expect(await screen.findByRole('heading', { level: 1, name: QUESTION })).toBeInTheDocument()
-    expect(chip('Fitness')).toHaveAttribute('aria-pressed', 'true')
-    expect(chip('Piano')).toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1, name: QUESTION })
+
+    // A tap is a normal action, and it is exactly what used to persist the
+    // lossy rewrite. Two taps put the selection back, so nothing the app did
+    // is left half-applied either.
+    await user.click(chip('Fitness'))
+    await user.click(chip('Fitness'))
+
+    expect(readStoredDraft()).toEqual(newer)
   })
 
   it('opens the Goal screen on a stored goal that is not text, with an empty box', async () => {
@@ -1170,7 +1179,11 @@ describe('continuing', () => {
     // an empty one, and gets a different message. This branch is only
     // reachable from stored data, which is why it lives here.
     renderWithStoredDraft(
-      { schemaVersion: 99, currentStep: 'goal', selectedGrowthAreaIds: ['ga_goneina-later-build'] },
+      {
+        schemaVersion: ONBOARDING_SCHEMA_VERSION,
+        currentStep: 'goal',
+        selectedGrowthAreaIds: ['ga_goneina-later-build'],
+      },
       '/onboarding/areas',
     )
 

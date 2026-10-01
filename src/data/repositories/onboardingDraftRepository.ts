@@ -41,10 +41,23 @@ import {
 import { ASCEND_ONBOARDING_DRAFT_KEY } from '../storage/keys'
 import type { KeyValueStore, StoreWriteResult } from '../storage/webStorageStore'
 
+/**
+ * What a draft save can report.
+ *
+ * `StoreWriteResult` describes the storage layer. `'newer-schema'` is a
+ * policy decision made above it: this build refuses to write over a draft it
+ * cannot represent, so a newer build still finds every answer intact.
+ */
+export type OnboardingDraftWriteResult = StoreWriteResult | 'newer-schema'
+
 export interface OnboardingDraftRepository {
-  /** The draft, or null when there is none or none can be trusted. */
+  /** The draft, or null when there is none, or none can be trusted. */
   load(): OnboardingDraft | null
-  save(draft: OnboardingDraft): StoreWriteResult
+  /**
+   * Writes the draft, unless storage holds one from a newer build — in which
+   * case nothing is written and `'newer-schema'` is returned.
+   */
+  save(draft: OnboardingDraft): OnboardingDraftWriteResult
   /** Called once a real Journey exists; onboarding data is then obsolete. */
   clear(): void
   isAvailable(): boolean
@@ -63,6 +76,7 @@ export interface OnboardingDraftRepository {
 export const ONBOARDING_DRAFT_MIGRATIONS: Record<number, (value: unknown) => unknown> = {
   1: migrateDraftV1ToV2,
   2: migrateDraftV2ToV3,
+  3: migrateDraftV3ToV4,
 }
 
 /**
@@ -259,6 +273,27 @@ export function classifyV2GrowthAreaId(
   return upgradeV2Id(id, slugs)
 }
 
+/**
+ * v3 -> v4: the draft gains an optional Goal and WHY.
+ *
+ * A pass-through, and deliberately so. v3 and v4 differ only by two fields
+ * that are allowed to be ABSENT, and every v3 draft has them absent — which
+ * is already the correct v4 representation of "not answered". There is no
+ * value to convert and no id to remap, so inventing a transformation here
+ * would only be somewhere for a bug to hide.
+ *
+ * It still has to EXIST. A version with no registered step is treated as
+ * unreconstructable and the whole draft is dropped, so a gap at 3 would send
+ * every existing v3 user back to the welcome screen.
+ *
+ * A v3 draft that already carries `goal`/`why` — which is exactly what the
+ * Phase 2B build wrote, for one commit, before this number was corrected —
+ * passes straight through to `normalizeFields`, which reads both normally.
+ */
+export function migrateDraftV3ToV4(value: unknown): unknown {
+  return value
+}
+
 /** The single prefix v2 used for all three namespaces. */
 const V2_ID_PREFIX = 'ga_'
 
@@ -304,7 +339,15 @@ export function createOnboardingDraftRepository(
       return migrateAndNormalizeDraft(raw, nowIso())
     },
 
-    save(draft: OnboardingDraft): StoreWriteResult {
+    save(draft: OnboardingDraft): OnboardingDraftWriteResult {
+      // The refusal in `load` is not enough on its own. `load` returning null
+      // shows a first-run screen, and the very first interaction would then
+      // save a fresh draft over the newer one. Re-reading storage here, rather
+      // than trusting a flag captured at load, also covers another tab
+      // writing a newer draft in between.
+      if (hasNewerSchema(store.read(ASCEND_ONBOARDING_DRAFT_KEY))) {
+        return 'newer-schema'
+      }
       return store.write(ASCEND_ONBOARDING_DRAFT_KEY, draft)
     },
 
@@ -326,11 +369,12 @@ export function createOnboardingDraftRepository(
  *   - an older version         migration path
  *   - corrupt or hand-edited   discarded
  *
- * and one that must never be trusted blindly:
- *   - a FUTURE version, meaning this build is older than the data. We
- *     keep the fields we understand and default the rest, because
- *     dropping the whole draft would delete answers the user gave to a
- *     newer version of the app.
+ * and one that must never be normalised:
+ *   - a FUTURE version, meaning this build is older than the data. There is
+ *     no name here for the fields a newer version added, and `normalizeFields`
+ *     rebuilds the draft from the keys this build knows — so reading a future
+ *     draft and writing it back DELETES the newer answers. Refusing touches
+ *     nothing on disk and leaves the data readable by the build that wrote it.
  */
 export function migrateAndNormalizeDraft(
   raw: unknown,
@@ -346,7 +390,10 @@ export function migrateAndNormalizeDraft(
   const startVersion = readSchemaVersion(value)
 
   if (startVersion > currentVersion) {
-    return normalizeFields(value, now)
+    // Fail safe, not generous. A partial read here would not be "keeping
+    // what we understand" — it would be a rewrite that deletes the rest on
+    // the next save. See the docstring above.
+    return null
   }
 
   for (let version = startVersion; version < currentVersion; version += 1) {
@@ -369,6 +416,19 @@ function readSchemaVersion(value: object): number {
 }
 
 /**
+ * Is the stored value a draft written by a NEWER build than this one?
+ *
+ * The same question `migrateAndNormalizeDraft` asks, but asked about raw
+ * storage rather than about a load. `save` uses it to refuse a write it
+ * cannot make honestly. Anything that is not a readable object is `false`:
+ * there is nothing there to protect, and refusing would be a bug.
+ */
+export function hasNewerSchema(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
+  return readSchemaVersion(raw) > ONBOARDING_SCHEMA_VERSION
+}
+
+/**
  * Field-by-field validation, then reconciliation.
  *
  * Each field is checked on its own so one bad value cannot discard good
@@ -377,8 +437,9 @@ function readSchemaVersion(value: object): number {
  * which areas exist.
  *
  * A draft written by an earlier build simply has no `goal` or `why` key,
- * which is the correct output here and is why adding them needed no schema
- * migration. See the note on ONBOARDING_SCHEMA_VERSION.
+ * which is the correct output here: absent is how this codebase spells
+ * "not answered". See the note on ONBOARDING_SCHEMA_VERSION for why the
+ * fields still earned a version bump.
  */
 function normalizeFields(value: object, now: string): OnboardingDraft {
   const candidate = value as Record<string, unknown>
