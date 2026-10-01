@@ -65,6 +65,12 @@ export function GrowthAreasScreen() {
     setCreating(false)
     setName('')
     setProblem(undefined)
+    // The confirmation belongs to the composer that produced it. Closing
+    // the composer ends that conversation, so leaving "Piano added." on
+    // screen means the next time they open it they are told about an add
+    // that happened a minute and a click ago — a live region saying
+    // something that is no longer what just happened.
+    setJustAdded(null)
   }
 
   const onSubmit = (event: FormEvent) => {
@@ -76,6 +82,10 @@ export function GrowthAreasScreen() {
 
     if (!result.ok) {
       setProblem(result.message)
+      // One outcome at a time. Showing "Piano added." while the box below
+      // it refuses to add anything says two contradictory things at once,
+      // and the refusal is the one that is about to matter.
+      setJustAdded(null)
       return
     }
 

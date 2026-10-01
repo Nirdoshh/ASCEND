@@ -574,6 +574,101 @@ describe('creating your own growth area', () => {
   })
 })
 
+/**
+ * The composer only ever reports one outcome.
+ *
+ * Found by driving a real browser rather than by reading the code: add an
+ * area, press Cancel, press "+ Create your own" again, and the
+ * confirmation from the first add was still on screen — so a live region
+ * was announcing an add that happened a minute and a click ago. Worse, a
+ * refused duplicate rendered the refusal and the stale confirmation
+ * together, which is two contradictory sentences about the same press.
+ *
+ * The rule these tests pin: the confirmation describes one submission, and
+ * anything that ends that submission — closing the composer, or the app
+ * refusing the next one — takes the confirmation with it.
+ */
+describe('the composer reporting exactly one outcome', () => {
+  /** The confirmation is the only role="status" on a healthy screen. */
+  function confirmation(): string | null {
+    return screen.queryByRole('status')?.textContent ?? null
+  }
+
+  it('does not greet a reopened composer with the last add', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/areas' })
+
+    const field = await openComposer(user)
+    await user.type(field, 'Digital Marketing')
+    await user.click(screen.getByRole('button', { name: /add it/i }))
+    expect(await screen.findByText('Digital Marketing added.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    await openComposer(user)
+
+    // The area itself survives — that is the promise the whole split
+    // between definition and selection rests on. Only the announcement of
+    // the previous press is gone.
+    expect(chip('Digital Marketing')).toBeInTheDocument()
+    expect(storedCustomAreas()).toHaveLength(1)
+    expect(screen.getByLabelText(QUESTION)).toHaveValue('')
+    await waitFor(() => {
+      expect(confirmation()).toBeNull()
+    })
+  })
+
+  it('never shows a confirmation and a refusal at the same time', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/areas' })
+
+    const field = await openComposer(user)
+    await user.type(field, 'Digital Marketing')
+    await user.click(screen.getByRole('button', { name: /add it/i }))
+    expect(await screen.findByText('Digital Marketing added.')).toBeInTheDocument()
+
+    // Same composer, still open, second press refused. The refusal is the
+    // only thing that should be on screen: it is the one about to matter.
+    await user.type(field, ' Fitness')
+    await user.click(screen.getByRole('button', { name: /add it/i }))
+
+    expect(await screen.findByText(/you already added “Fitness”/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText(/added\.$/)).not.toBeInTheDocument()
+    })
+    expect(confirmation()).toBeNull()
+    expect(storedCustomAreas()).toHaveLength(1)
+  })
+
+  it('keeps the confirmation while the next name is being typed', async () => {
+    const user = userEvent.setup()
+    renderOnboarding({ startAt: '/onboarding/areas' })
+
+    const field = await openComposer(user)
+    await user.type(field, 'Digital Marketing')
+    await user.click(screen.getByRole('button', { name: /add it/i }))
+    expect(await screen.findByText('Digital Marketing added.')).toBeInTheDocument()
+
+    // Not cleared by typing, and that is deliberate. A refusal is stale the
+    // moment they start fixing it, because it is about the box; this is not
+    // about the box at all, it is about the list, and it is still true —
+    // it is also the answer to "why did that chip just appear?".
+    await user.type(field, 'Pi')
+    expect(screen.getByText('Digital Marketing added.')).toBeInTheDocument()
+    expect(field).toHaveValue('Pi')
+
+    // A second success REPLACES it rather than stacking, so the status
+    // region never grows into a list of everything ever added.
+    await user.clear(field)
+    await user.type(field, 'Piano')
+    await user.click(screen.getByRole('button', { name: /add it/i }))
+
+    expect(await screen.findByText('Piano added.')).toBeInTheDocument()
+    expect(screen.queryByText('Digital Marketing added.')).not.toBeInTheDocument()
+    expect(confirmation()).toBe('Piano added.')
+    expect(storedCustomAreas()).toHaveLength(2)
+  })
+})
+
 describe('an earlier choice changing never destroys work', () => {
   it('keeps a custom area after it is deselected, and lets it come back', async () => {
     const user = userEvent.setup()
