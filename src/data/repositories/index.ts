@@ -39,3 +39,5 @@ export {
   type DailyStepsRepository,
   type DailyStepsRepositoryWriteResult,
 } from './dailyStepsRepository'
+
+export { createSystemRepository, type SystemRepository, type SystemRepositoryWriteResult } from './systemRepository'

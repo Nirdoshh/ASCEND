@@ -35,3 +35,6 @@ export const ASCEND_ONBOARDING_DRAFT_KEY = 'ascend:onboarding-draft:v1'
  * and the Journey's JOURNEY_SCHEMA_VERSION MUST NOT be conflated.
  */
 export const ASCEND_JOURNEY_KEY = 'ascend:journey:v1'
+
+/** Beta 1 System Paths and Goals. Kept beside, never merged into, Journey data. */
+export const ASCEND_SYSTEM_KEY = 'ascend:system:v1'

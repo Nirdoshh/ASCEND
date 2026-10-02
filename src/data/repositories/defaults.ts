@@ -17,6 +17,8 @@ import type { TodayWinRepository } from './todayWinRepository'
 import { createDailyStepsRepository } from './dailyStepsRepository'
 import type { DailyStepsRepository } from './dailyStepsRepository'
 import { createWebStorageStore } from '../storage'
+import { createSystemRepository } from './systemRepository'
+import type { SystemRepository } from './systemRepository'
 
 /**
  * The repository onboarding uses by default.
@@ -47,3 +49,6 @@ export const defaultTodayWinRepository: TodayWinRepository =
  */
 export const defaultDailyStepsRepository: DailyStepsRepository =
   createDailyStepsRepository(createWebStorageStore())
+
+export const defaultSystemRepository: SystemRepository =
+  createSystemRepository(createWebStorageStore())

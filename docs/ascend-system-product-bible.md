@@ -1,7 +1,7 @@
 # ASCEND SYSTEM — Product Bible
 
-**Status:** System Prototype Alpha, October 2026
-**Scope:** Isolated `/system` experience with sample fixtures. This document records direction and open questions; it does not define a production schema.
+**Status:** ASCEND System Beta 1, October 2026
+**Scope:** Isolated `/system` experience with a local-first Path and Goal foundation. This document records the bounded prototype contract; it does not define a production backend schema.
 
 ## 1. Product vision
 
@@ -29,69 +29,81 @@ An Action is an observable real-world step. Completion is a meaningful signal, n
 
 ## 5. Path model
 
-A Path is a direction of growth that connects identity to action. The alpha presents BUILD, BODY, and VOICE. A Path can be focused so unrelated branches recede, making the next meaningful context easier to see.
+A Path is a user-owned direction of growth that connects identity to action. Beta 1 seeds four suggested Paths: **BODY** (What am I training?), **MIND** (What am I learning?), **FOCUS** (What deserves my attention?), and **SELF** (Who am I becoming?). They are ordinary records, not fixture labels. The model also accepts custom Paths so future additions do not require a migration.
 
-## 6. Graph model
+Each Path has `schemaVersion`, an opaque stable `id`, `name`, optional `description`, `source` (`SUGGESTED` or `CUSTOM`), `status` (`ACTIVE`, `PAUSED`, or `ARCHIVED`), `createdAt`, and `updatedAt`. Names are presentation text; references use the id. Archiving keeps the record and its history.
+
+Beta 1 stores the collection under `ascend:system:v1`; the collection, every Path, and every Goal declare schema version 1. Future versions are left untouched and reported to the user until a deliberate migration exists. Existing Journey, DailyPlan, Today's Win, and Daily Step records remain under their existing keys.
+
+## 6. Goal model
+
+A Goal belongs to exactly one Path through `pathId`. It has `schemaVersion`, an opaque stable `id`, `title`, optional `description`, optional `why`, `status` (`ACTIVE`, `PAUSED`, `COMPLETED`, or `ARCHIVED`), `createdAt`, `updatedAt`, and nullable `completedAt`. Editing changes authored text while preserving the Goal id, Path association, and timestamps that future Roadmap and Notes records can reference.
+
+The Path screen keeps the graph primary. Selecting a Path reveals its Goals and a restrained detail area with Add, Edit, Pause, Resume, Complete, and Archive actions. Archived and completed records remain recoverable in the persisted collection but do not count as active Goals. Empty Paths explain the next action without inventing a Goal for the user.
+
+## 7. Graph model
 
 The ASCEND Graph is a semantic, stable-layout SVG: YOU at the conceptual center, Paths above it, then Goals, Milestones, and the current Action. It uses curved fine connections, subtle perspective, depth through scale and luminosity, and focusable branches. It is intentionally not a random physics graph or an Obsidian clone. Node placement is stable so meaning does not move while a user explores.
 
 Clicking a Path focuses that branch. Clicking a Goal or Milestone focuses the corresponding branch and exposes its connected depth. The current Action is visually connected to its Path.
 
-## 7. Level
+## 8. Level
 
 Level is intended to represent permanent accumulated progression. Normal daily failure must not reduce permanent Level. Numerical accumulation and thresholds are deliberately unresolved.
 
-## 8. Rank
+## 9. Rank
 
 Rank is intended to represent current progression tier or standing. Its relationship to Level, evidence, time, and recovery is not finalized. The alpha shows sample Rank C only.
 
-## 9. System Stability
+## 10. System Stability
 
 Stability is a temporary system condition. It may eventually reflect accepted commitments, completed Lock-In sessions, abandonment, and recovery. Alpha shows sample Stability 82% and does not calculate or persist it.
 
-## 10. Conditions
+## 11. Conditions
 
 The exploratory condition vocabulary is **STABLE**, **UNSTABLE**, **DEGRADED**, and **DORMANT**. Conditions need definitions, transition rules, user language, and recovery affordances before production use.
 
-## 11. Penalties and recovery direction
+## 12. Penalties and recovery direction
 
 The direction is to keep setbacks temporary and recoverable. A normal missed day must not damage permanent Level. Voluntary abandonment may eventually affect Stability or a temporary condition; emergency and legitimate interruptions should not receive punishment. No formulas or penalties are implemented in Alpha.
 
-## 12. Lock-In
+## 13. Lock-In
 
 Lock-In is a focused-session UX prototype, not OS-level blocking. The alpha hides normal navigation, keeps the mission, timer, objectives, sealed distractions, and an always-available emergency exit. Exiting asks for a reason. Real blocking would require native or mobile integration later.
 
 The future “Deep Lock” direction may require a minimum focus time and primary mission completion. These are product hypotheses, not finalized rules.
 
-## 13. Status
+## 14. Status
 
 Status is a readout of what is happening to the user's System. Alpha includes clearly labeled sample values: Level 18, Rank C, Stability 82%, Condition Stable. Below that, Real Evidence modules show action history for BUILD, BODY, and VOICE. Alpha does not claim hidden measurements such as strength or intelligence scores.
 
-## 14. Visual language
+## 15. Visual language
 
 The System uses a near-black midnight environment, graphite and translucent surfaces, fine geometric frames, indigo and violet light, icy text, and a small coral signal for sample or interruption states. Depth comes from layered atmosphere, restrained gradients, linework, and selective bloom. There are no external images or copyrighted assets. The System has its own geometry and typography treatment.
 
-## 15. Motion language
+## 16. Motion language
 
 Motion is purposeful and short: 120–300ms for interface changes and 300–600ms for meaningful arrival or consequence moments. Alpha includes a brief awakening, panel arrival, branch focus, and a restrained pulse traveling through the active graph connection after completion. It avoids confetti, loot, coins, constant particles, bounce, and interaction-blocking transitions. Reduced-motion users receive the same state changes without spatial or looping motion.
 
-## 16. Sample-only data
+## 17. Sample-only data
+
+The Beta 1 Path and Goal records are real local user data. The values listed below remain sample-only prototype readouts.
 
 The directive, objectives, timer, Level 18, Rank C, Stability 82%, conditions, evidence counts, identity statement, and “21 days awake” are sample fixtures. They are not user records, analytics, measurements, or progression formulas.
 
-## 17. Not implemented
+## 18. Not implemented
 
-Alpha does not implement persistence, schema migration, domain changes, repository changes, backend, authentication, AI, native app blocking, real timers, numerical progression math, final Rank rules, production navigation, or a light System theme.
+Beta 1 does not implement Roadmap, Milestones, Node Notes, backlinks, Daily Directive automation, backend, authentication, AI, native app blocking, real timers, XP formulas, Level formulas, Rank formulas, Stability formulas, penalties, production navigation, or a light System theme.
 
-## 18. Copyright and originality boundary
+## 19. Copyright and originality boundary
 
 ASCEND may take broad conceptual inspiration from progression fiction and games. It must not copy artwork, exact UI panels, logos, sounds, screenshots, character assets, or terminology unique to another work. All alpha geometry, copy, layout, and visual treatment are original ASCEND explorations.
 
-## 19. Future native requirements
+## 20. Future native requirements
 
 True blocking of apps and sites, reliable background timing, device policy, notifications, and cross-device sessions will require a native or mobile integration with explicit permissions and platform-specific safety behavior. The web prototype cannot provide those guarantees.
 
-## 20. Unresolved product decisions
+## 21. Unresolved product decisions
 
 - How are Level contributions measured without incentivizing quantity?
 - What makes Rank change, and how should Rank communicate uncertainty?
