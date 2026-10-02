@@ -8,7 +8,8 @@
  */
 
 .primary-nav {
-  position: sticky;
+  position: fixed;
+  inset-inline: 0;
   bottom: 0;
   z-index: 20;
 
@@ -20,7 +21,8 @@
 }
 
 .primary-nav__list {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5rem), 1fr));
   align-items: stretch;
   justify-content: space-around;
   gap: var(--space-1);
@@ -42,7 +44,7 @@
   gap: var(--space-1);
 
   /* 44px+ tall, full-width tap area per tab. */
-  min-height: var(--nav-height);
+  min-height: max(var(--tap-min), 3rem);
   padding-block: var(--space-2);
 
   color: var(--text-muted);
@@ -69,17 +71,38 @@
   display: block;
 }
 
+.primary-nav__label {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Larger text and narrow screens need room for labels, not smaller type. */
+@media (max-width: 22rem) {
+  .primary-nav__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+  }
+  .primary-nav__link {
+    flex-direction: row;
+    min-height: 3rem;
+  }
+}
+
 /* Tablet and up: a horizontal top bar instead of a bottom bar. */
 @media (min-width: 48rem) {
   .primary-nav {
     position: sticky;
     top: 0;
     bottom: auto;
+    inset-inline: auto;
     border-block-start: none;
     border-block-end: 1px solid var(--border-subtle);
   }
 
   .primary-nav__list {
+    display: flex;
     flex-wrap: wrap;
     justify-content: flex-start;
     gap: var(--space-2);

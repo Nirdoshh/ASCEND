@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ScreenHeader } from '../../app/ScreenHeader'
@@ -12,7 +12,7 @@ import {
 } from '../../application/dailySteps'
 import { getOrCreateTodayPlan } from '../../application/todayPlan'
 import { loadTodayWin, setTodayWin } from '../../application/todayWin'
-import { Button, Card, EmptyState, ErrorState, Icon, Skeleton, TextField } from '../../components/ui'
+import { Button, Card, EmptyState, ErrorState, Icon, TextField } from '../../components/ui'
 import {
   defaultDailyPlanRepository,
   defaultDailyStepsRepository,
@@ -23,6 +23,8 @@ import type { DailyPlan } from '../../domain/dailyPlan'
 import { isDailyStepCompleted, type DailyStep } from '../../domain/dailyStep'
 import type { Journey } from '../../domain/journey'
 import type { TodayWin } from '../../domain/todayWin'
+import { cn } from '../../lib/cn'
+import { TodayLoading } from './TodayLoading'
 import './TodayScreen.css'
 
 type SaveStatus = 'idle' | 'saving' | 'saved'
@@ -43,12 +45,41 @@ export function TodayScreen() {
   const [winStatus, setWinStatus] = useState<SaveStatus>('idle')
   const [editStepText, setEditStepText] = useState('')
   const [editStepError, setEditStepError] = useState<string | undefined>()
+  const [addStepError, setAddStepError] = useState<string | undefined>()
+  const [stepOperationError, setStepOperationError] = useState<string | undefined>()
+  const [stepFeedback, setStepFeedback] = useState('')
+  const [newStepId, setNewStepId] = useState<string | null>(null)
   const [completionError, setCompletionError] = useState<string | undefined>()
   const [stepStatus, setStepStatus] = useState<SaveStatus>('idle')
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [stepDraftText, setStepDraftText] = useState('')
   const [completionSavingStepId, setCompletionSavingStepId] = useState<string | null>(null)
   const [isEditingWin, setIsEditingWin] = useState(false)
+  const winFieldRef = useRef<HTMLInputElement>(null)
+  const winEditRef = useRef<HTMLButtonElement>(null)
+  const stepFieldRef = useRef<HTMLInputElement>(null)
+  const addFieldRef = useRef<HTMLInputElement>(null)
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+  const completionRefs = useRef(new Map<string, HTMLInputElement>())
+  const pendingFocus = useRef<string | null>(null)
+
+  useLayoutEffect(() => {
+    const target = pendingFocus.current
+    if (target === null) return
+    const control = target === 'win' ? winEditRef.current
+      : target === 'add' ? addFieldRef.current
+        : rowRefs.current.get(target) ?? completionRefs.current.get(target)
+    control?.focus()
+    pendingFocus.current = null
+  }, [isEditingWin, editingStepId, steps, win])
+
+  useEffect(() => {
+    if (isEditingWin) winFieldRef.current?.focus()
+  }, [isEditingWin])
+
+  useEffect(() => {
+    if (editingStepId) stepFieldRef.current?.focus()
+  }, [editingStepId])
 
   useEffect(() => {
     let cancelled = false
@@ -77,11 +108,13 @@ export function TodayScreen() {
   }, [reloadKey])
 
   const handleSetWin = async (text: string) => {
+    if (winStatus === 'saving' || text.trim() === '') return
     setEditError(undefined)
     setWinStatus('saving')
     const result = await setTodayWin(defaultJourneyRepository, defaultDailyPlanRepository, defaultTodayWinRepository, text)
 
     if (result.ok) {
+      pendingFocus.current = 'win'
       setWin(result.win)
       setEditText('')
       setIsEditingWin(false)
@@ -89,11 +122,15 @@ export function TodayScreen() {
     } else {
       setEditError(result.message)
       setWinStatus('idle')
+      winFieldRef.current?.focus()
     }
   }
 
   const handleAddStep = async (text: string) => {
-    setEditStepError(undefined)
+    if (stepStatus === 'saving' || text.trim() === '') return
+    setAddStepError(undefined)
+    setStepOperationError(undefined)
+    setStepFeedback('')
     setStepStatus('saving')
     const result = await addDailyStep(
       defaultDailyPlanRepository,
@@ -104,17 +141,23 @@ export function TodayScreen() {
     )
 
     if (result.ok) {
+      pendingFocus.current = result.steps.length === 4 ? result.steps.at(-1)?.id ?? 'add' : 'add'
       setSteps(result.steps)
       setEditStepText('')
+      setNewStepId(result.steps.at(-1)?.id ?? null)
       setStepStatus('saved')
+      setStepFeedback('Step added.')
     } else {
-      setEditStepError(result.message)
+      setAddStepError(result.message)
       setStepStatus('idle')
     }
   }
 
   const handleEditStep = async (stepId: string, text: string) => {
+    if (stepStatus === 'saving' || text.trim() === '') return
     setEditStepError(undefined)
+    setStepOperationError(undefined)
+    setStepFeedback('')
     setStepStatus('saving')
     const result = await editDailyStep(
       defaultDailyStepsRepository,
@@ -126,18 +169,23 @@ export function TodayScreen() {
     )
 
     if (result.ok) {
+      pendingFocus.current = stepId
       setSteps(result.steps)
       setEditingStepId(null)
       setStepDraftText('')
       setStepStatus('saved')
+      setStepFeedback('Step updated.')
     } else {
       setEditStepError(result.message)
       setStepStatus('idle')
+      stepFieldRef.current?.focus()
     }
   }
 
   const handleRemoveStep = async (stepId: string) => {
-    setEditStepError(undefined)
+    if (stepStatus === 'saving') return
+    setStepOperationError(undefined)
+    setStepFeedback('')
     setStepStatus('saving')
     const result = await removeDailyStep(
       defaultDailyStepsRepository,
@@ -148,16 +196,25 @@ export function TodayScreen() {
     )
 
     if (result.ok) {
+      const index = steps.findIndex((step) => step.id === stepId)
+      const neighbour = steps[index + 1] ?? steps[index - 1]
+      // Move off the disappearing control before committing the new list.
+      const target = neighbour ? rowRefs.current.get(neighbour.id) ?? completionRefs.current.get(neighbour.id) : addFieldRef.current
+      target?.focus()
+      pendingFocus.current = neighbour?.id ?? 'add'
       setSteps(result.steps)
       setStepStatus('saved')
+      setStepFeedback('Step removed.')
     } else {
-      setEditStepError(result.message)
+      setStepOperationError(result.message)
       setStepStatus('idle')
     }
   }
 
   const handleToggleStep = async (step: DailyStep, completed: boolean) => {
+    if (completionSavingStepId !== null) return
     setCompletionError(undefined)
+    setStepFeedback('')
     setCompletionSavingStepId(step.id)
     const result = completed
       ? await completeDailyStep(
@@ -179,6 +236,7 @@ export function TodayScreen() {
     if (result.ok) {
       setSteps(result.steps)
       setStepStatus('saved')
+      setStepFeedback(`Step ${steps.findIndex((item) => item.id === step.id) + 1} ${completed ? 'completed' : 'marked incomplete'}.`)
     } else {
       setCompletionError(result.message)
       setStepStatus('idle')
@@ -186,21 +244,7 @@ export function TodayScreen() {
   }
 
   if (isLoading) {
-    return (
-      <div className="today" aria-busy="true">
-        <ScreenHeader title="Today">
-          <p>Loading today&rsquo;s plan&hellip;</p>
-        </ScreenHeader>
-        <Card className="today__section">
-          <div className="today__steps-content" aria-hidden="true">
-            <Skeleton width="8rem" height="1.5rem" />
-            <Skeleton height="2rem" />
-            <Skeleton width="7rem" height="2.75rem" />
-          </div>
-          <p className="visually-hidden" role="status">Loading today&rsquo;s plan&hellip;</p>
-        </Card>
-      </div>
-    )
+    return <TodayLoading />
   }
 
   if (error || !journey || !plan) {
@@ -234,7 +278,6 @@ export function TodayScreen() {
   return (
     <div className="today">
       <ScreenHeader title="Today" eyebrow={formattedDate}>
-        <h2 className="today__journey-label">Your Journey</h2>
         <p className="today__journey-goal">{journey.goal.text}</p>
       </ScreenHeader>
 
@@ -243,10 +286,11 @@ export function TodayScreen() {
           <div className="today__win-content">
             <h2 className="today__section-title" id="today-win-heading">Today&rsquo;s Win</h2>
             {win && !isEditingWin ? (
-              <>
+              <div className="today__win-display">
                 <p className="today__win-value">{win.text}</p>
                 <div className="today__actions">
                   <Button
+                    ref={winEditRef}
                     variant="quiet"
                     leadingIcon={<Icon name="edit" size={18} />}
                     onClick={() => {
@@ -259,35 +303,36 @@ export function TodayScreen() {
                     Edit
                   </Button>
                   <p className="today__status today__feedback" role="status" aria-live="polite">
-                    {winStatus === 'saved' ? 'Saved.' : ''}
+                    {winStatus === 'saved' ? 'Today’s Win saved.' : ''}
                   </p>
                 </div>
-              </>
+              </div>
             ) : (
-              <>
+              <form className="today__composer" onSubmit={(event) => { event.preventDefault(); void handleSetWin(editText) }}>
                 {!win ? <p className="today__hint">What would make today a win?</p> : null}
                 <TextField
+                  ref={winFieldRef}
                   label="Today&rsquo;s Win"
                   value={editText}
                   onChange={(event) => setEditText(event.target.value)}
-                  placeholder="Deploy the auth flow"
+                  placeholder="Go for a walk before lunch"
                   error={editError}
                 />
                 <div className="today__actions">
                   <Button
+                    type="submit"
                     loading={winStatus === 'saving'}
-                    onClick={() => void handleSetWin(editText)}
                     disabled={editText.trim() === ''}
                     leadingIcon={<Icon name="save" size={18} />}
                   >
                     {win ? 'Save Today\'s Win' : 'Set Today\'s Win'}
                   </Button>
-                  {win ? <Button variant="quiet" leadingIcon={<Icon name="close" size={18} />} onClick={() => { setIsEditingWin(false); setEditText(''); setEditError(undefined); setWinStatus('idle') }}>Cancel</Button> : null}
+                  {win ? <Button variant="quiet" leadingIcon={<Icon name="close" size={18} />} onClick={() => { pendingFocus.current = 'win'; setIsEditingWin(false); setEditText(''); setEditError(undefined); setWinStatus('idle') }}>Cancel</Button> : null}
                   <p className="today__status today__feedback" role="status" aria-live="polite">
-                    {winStatus === 'saved' ? 'Saved.' : ''}
+                    {winStatus === 'saved' ? 'Today’s Win saved.' : ''}
                   </p>
                 </div>
-              </>
+              </form>
             )}
           </div>
         </Card>
@@ -307,16 +352,24 @@ export function TodayScreen() {
                     <p className="today__step-count">{steps.length} of 4 steps</p>
                     <ol className="today__step-list">
                       {steps.map((step, index) => (
-                        <li className={`today__step-row${isDailyStepCompleted(step) ? ' today__step-row--completed' : ''}`} key={step.id}>
+                        <li
+                          className={cn('today__step-row',
+                            isDailyStepCompleted(step) && 'today__step-row--completed',
+                            editingStepId === step.id && 'today__step-row--editing',
+                            newStepId === step.id && 'today__step-row--new',
+                          )}
+                          key={step.id}
+                          onAnimationEnd={() => { if (newStepId === step.id) setNewStepId(null) }}
+                        >
                           <div className="today__step-leading">
-                            <span className="today__step-number" aria-hidden="true">{index + 1}</span>
                             <label className="today__step-completion">
                               <input
+                                ref={(element) => { if (element) completionRefs.current.set(step.id, element); else completionRefs.current.delete(step.id) }}
                                 type="checkbox"
                                 checked={isDailyStepCompleted(step)}
-                                disabled={completionSavingStepId === step.id}
+                                disabled={completionSavingStepId !== null}
                                 onChange={(event) => void handleToggleStep(step, event.target.checked)}
-                                aria-label={`${isDailyStepCompleted(step) ? 'Mark' : 'Complete'} step ${index + 1}: ${step.text}`}
+                                aria-label={`${isDailyStepCompleted(step) ? 'Mark' : 'Complete'} step ${index + 1}${isDailyStepCompleted(step) ? ' incomplete' : ''}: ${step.text}`}
                               />
                               <span className="today__step-check-icon" aria-hidden="true">
                                 {isDailyStepCompleted(step) ? <Icon name="check" size={18} /> : null}
@@ -324,25 +377,26 @@ export function TodayScreen() {
                             </label>
                           </div>
                           {editingStepId === step.id ? (
-                            <div className="today__step-main">
+                            <form className="today__step-main today__composer" onSubmit={(event) => { event.preventDefault(); void handleEditStep(step.id, stepDraftText) }}>
                               <TextField
+                                ref={stepFieldRef}
                                 label={'Edit step ' + (index + 1)}
                                 value={stepDraftText}
                                 onChange={(event) => setStepDraftText(event.target.value)}
                                 error={editStepError}
                               />
                               <div className="today__step-actions">
-                                <Button loading={stepStatus === 'saving'} onClick={() => void handleEditStep(step.id, stepDraftText)} disabled={stepDraftText.trim() === ''} leadingIcon={<Icon name="save" size={18} />}>Save</Button>
-                                <Button variant="quiet" leadingIcon={<Icon name="close" size={18} />} onClick={() => { setEditingStepId(null); setStepDraftText(''); setEditStepError(undefined); setStepStatus('idle') }}>Cancel</Button>
+                                <Button type="submit" loading={stepStatus === 'saving'} disabled={stepDraftText.trim() === ''} leadingIcon={<Icon name="save" size={18} />}>Save</Button>
+                                <Button variant="quiet" leadingIcon={<Icon name="close" size={18} />} onClick={() => { pendingFocus.current = step.id; setEditingStepId(null); setStepDraftText(''); setEditStepError(undefined); setStepStatus('idle') }}>Cancel</Button>
                               </div>
-                            </div>
+                            </form>
                           ) : (
                             <>
                               <div className="today__step-main">
                                 <p className="today__step-text">{step.text}</p>
                               </div>
                               <div className="today__step-actions">
-                                <Button variant="quiet" leadingIcon={<Icon name="edit" size={18} />} onClick={() => { setEditingStepId(step.id); setStepDraftText(step.text); setEditStepError(undefined); setStepStatus('idle') }} aria-label={'Edit step ' + (index + 1)}>Edit</Button>
+                                <Button ref={(element) => { if (element) rowRefs.current.set(step.id, element); else rowRefs.current.delete(step.id) }} variant="quiet" leadingIcon={<Icon name="edit" size={18} />} onClick={() => { setEditingStepId(step.id); setStepDraftText(step.text); setEditStepError(undefined); setStepStatus('idle') }} aria-label={'Edit step ' + (index + 1)}>Edit</Button>
                                 <Button variant="quiet" leadingIcon={<Icon name="remove" size={18} />} onClick={() => void handleRemoveStep(step.id)} aria-label={'Remove step ' + (index + 1)}>Remove</Button>
                               </div>
                             </>
@@ -351,29 +405,31 @@ export function TodayScreen() {
                       ))}
                     </ol>
                     {steps.length > 0 && steps.every(isDailyStepCompleted) ? (
-                      <p className="today__complete-ack" role="status">Today&rsquo;s steps are complete.</p>
+                      <p className="today__complete-ack">Today&rsquo;s steps are complete.</p>
                     ) : null}
                     {completionError ? <p className="today__step-error" role="alert">{completionError}</p> : null}
                   </>
                 ) : null}
 
                 {steps.length < 4 ? (
-                  <div className="today__add-step">
+                  <form className="today__add-step" onSubmit={(event) => { event.preventDefault(); void handleAddStep(editStepText) }}>
                     <TextField
+                      ref={addFieldRef}
                       label="Add a step"
                       value={editStepText}
                       onChange={(event) => setEditStepText(event.target.value)}
-                      placeholder="Fix the onboarding routing bug"
-                      error={editStepError}
+                      placeholder="Put on my shoes and head outside"
+                      error={addStepError}
                     />
                     <div className="today__actions">
-                      <Button loading={stepStatus === 'saving'} onClick={() => void handleAddStep(editStepText)} disabled={editStepText.trim() === '' || steps.length >= 4} leadingIcon={<Icon name="plus" size={18} />}>Add Step</Button>
+                      <Button type="submit" loading={stepStatus === 'saving'} disabled={editStepText.trim() === '' || steps.length >= 4} leadingIcon={<Icon name="plus" size={18} />}>Add Step</Button>
                       <p className="today__step-minimum">{steps.length < 2 ? 'Add at least 2 steps' : 'Up to 4 steps'}</p>
                     </div>
-                  </div>
+                  </form>
                 ) : null}
+                {stepOperationError ? <p className="today__step-error" role="alert">{stepOperationError}</p> : null}
                 <p className="today__status today__feedback" role="status" aria-live="polite">
-                  {stepStatus === 'saved' ? 'Step changes saved.' : ''}
+                  {stepFeedback}{stepFeedback && steps.length > 0 && steps.every(isDailyStepCompleted) ? ' Today’s steps are complete.' : ''}
                 </p>
               </>
             )}

@@ -58,6 +58,7 @@
 
 .milestones__text {
   flex: 1 1 14rem;
+  min-inline-size: 0;
   margin: 0;
 
   /* Long unbroken words wrap instead of forcing the row wider than the phone
@@ -67,6 +68,8 @@
 
 .milestones__item-actions {
   display: flex;
+  flex-wrap: wrap;
+  min-inline-size: 0;
   gap: var(--space-1);
 }
 

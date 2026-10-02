@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
@@ -27,6 +27,8 @@ import { MilestonesScreen } from './MilestonesScreen'
 import { OnboardingLayout } from './OnboardingLayout'
 import { WelcomeScreen } from './WelcomeScreen'
 import { WhyScreen } from './WhyScreen'
+import { SummaryScreen } from './SummaryScreen'
+import { ASCEND_JOURNEY_KEY } from '../../data/storage/keys'
 
 /**
  * Onboarding tests, driven the way a person drives the screens.
@@ -118,8 +120,10 @@ function renderOnboarding(
           { path: 'duration', element: <DurationScreen /> },
           { path: 'milestones', element: <MilestonesScreen /> },
           { path: 'effort', element: <EffortScreen /> },
+          { path: 'summary', element: <SummaryScreen /> },
         ],
       },
+      { path: '/today', element: <h1>Today</h1> },
     ],
     { initialEntries: [startAt] },
   )
@@ -381,8 +385,8 @@ describe('choosing growth areas', () => {
     // aria-pressed carries the state to assistive technology; the tick
     // carries it visually, which is what makes it survive greyscale and
     // forced-colours mode.
-    expect(chip('Fitness').textContent).toContain('✓')
-    expect(chip('Reading').textContent).not.toContain('✓')
+    expect(chip('Fitness').querySelector('svg')).toBeInTheDocument()
+    expect(chip('Reading').querySelector('svg')).not.toBeInTheDocument()
   })
 
   it('keeps several choices, in the order they were made', async () => {
@@ -1350,7 +1354,7 @@ describe('continuing', () => {
     expect(storedSelection()).toEqual([suggestedGrowthAreaId('fitness')])
   })
 
-  it('still creates no journey and no real data, six steps later', async () => {
+  it('keeps all answers as a draft until Summary is explicitly confirmed', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: '/onboarding/areas' })
 
@@ -1364,10 +1368,7 @@ describe('continuing', () => {
     await user.type(screen.getByLabelText(WHY_QUESTION), 'Because I want to prove I can')
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    // All the way to the end of the built path, answering everything on the
-    // way. This is the strongest version of the claim: even a user who has
-    // given every answer this build can accept has created nothing but a
-    // draft. Phase 2D creates the Journey, and Phase 2C must not.
+    // Every answer remains a draft until Start Day 1 is explicitly pressed.
     await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
     await user.click(screen.getByRole('button', { name: '30 days' }))
     await user.click(screen.getByRole('button', { name: /continue/i }))
@@ -1379,10 +1380,9 @@ describe('continuing', () => {
     await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
     await user.click(screen.getByRole('button', { name: '20 minutes' }))
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { name: 'Your Journey', level: 1 })
 
-    // The draft is the ONLY thing written anywhere. This build creates no
-    // Journey, no Day 1 plan, no Growth Points and no completion state.
+    // Reaching Summary alone does not create a Journey or daily plan.
     expect(Object.keys(window.localStorage)).toEqual([ASCEND_ONBOARDING_DRAFT_KEY])
   })
 
@@ -1623,10 +1623,9 @@ describe('why it matters to you', () => {
     renderOnboarding({ startAt: '/onboarding/why' })
 
     expect(screen.getByRole('heading', { level: 1, name: WHY_QUESTION })).toBeInTheDocument()
-    // The supporting copy is the promise, not decoration: this is the one
-    // answer the app will read back on a bad day.
+    // Supporting copy explains the answer without promising reminders.
     expect(
-      screen.getByText(/when things get difficult, we.ll remind you why you started/i),
+      screen.getByText(/put your reason into words/i),
     ).toBeInTheDocument()
   })
 
@@ -1795,12 +1794,9 @@ describe('why it matters to you', () => {
     await screen.findByRole('heading', { level: 1, name: DURATION_QUESTION })
 
     // The Continue button that had focus is gone with its screen, so focus
-    // starts over at the top of the new one. Two stops reach the question:
-    // the skip link, then the first preset. Every option after that is an
-    // ordinary button in the tab order, so the whole step is operable from
-    // the keyboard without ever using a pointer.
-    await user.tab()
-    expect(screen.getByRole('link', { name: /skip to the question/i })).toHaveFocus()
+    // starts at the new question. Every option is an ordinary button.
+    // Route changes orient focus to the new question before its controls.
+    expect(screen.getByRole('main')).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('button', { name: '21 days' })).toHaveFocus()
   })
@@ -1899,7 +1895,7 @@ describe('the duration question', () => {
     await user.click(screen.getByRole('button', { name: '30 days' }))
 
     expect(readStoredDraft()?.durationDays).toBe(30)
-    expect(screen.getByText('30 days. You can change this later.')).toBeInTheDocument()
+    expect(screen.getByText('30 days. Review this before starting.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
@@ -1919,7 +1915,7 @@ describe('the duration question', () => {
     await user.click(screen.getByRole('button', { name: /^use this$/i }))
 
     expect(readStoredDraft()?.durationDays).toBe(120)
-    expect(await screen.findByText('120 days. You can change this later.')).toBeInTheDocument()
+    expect(await screen.findByText('120 days. Review this before starting.')).toBeInTheDocument()
   })
 
   it('refuses a custom value below the minimum, names the range, and moves focus to the box', async () => {
@@ -2379,7 +2375,7 @@ describe('the daily effort question', () => {
     expect(screen.getByText('Choose how many minutes you want.')).toBeInTheDocument()
   })
 
-  it('records a preset and then states the boundary of this build honestly', async () => {
+  it('records a preset and opens the existing Summary', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: STEP_URLS.effort })
     await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
@@ -2389,7 +2385,7 @@ describe('the daily effort question', () => {
 
     await user.click(screen.getByRole('button', { name: /continue/i }))
 
-    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your Journey', level: 1 })).toBeInTheDocument()
     expect(readStoredDraft()?.currentStep).toBe('summary')
 
     // No Journey, no Day 1, no Growth Points. The only thing Continue did was
@@ -2408,16 +2404,16 @@ describe('the daily effort question', () => {
     )
   })
 
-  it('"Change my answer" brings the Continue button back', async () => {
+  it('returns from Summary to the effort answer without losing the selection', async () => {
     const user = userEvent.setup()
     renderOnboarding({ startAt: STEP_URLS.effort })
     await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
 
     await user.click(screen.getByRole('button', { name: '20 minutes' }))
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { name: 'Your Journey', level: 1 })
 
-    await user.click(screen.getByRole('button', { name: /change my answer/i }))
+    await user.click(screen.getByRole('link', { name: 'Edit Daily Effort' }))
 
     expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: '20 minutes' })).toHaveAttribute(
@@ -2436,7 +2432,7 @@ describe('the daily effort question', () => {
     await user.click(screen.getByRole('button', { name: /^use this$/i }))
 
     expect(readStoredDraft()?.dailyEffortMinutes).toBe(25)
-    expect(await screen.findByText('25 minutes. You can change this later.')).toBeInTheDocument()
+    expect(await screen.findByText('25 minutes. Review this before starting.')).toBeInTheDocument()
   })
 
   it('refuses a custom value outside 5 to 480 minutes', async () => {
@@ -2514,10 +2510,10 @@ describe('moving through the three new steps', () => {
 
     await user.click(screen.getByRole('button', { name: '20 minutes' }))
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    expect(await screen.findByText(/not built yet/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your Journey', level: 1 })).toBeInTheDocument()
 
     // Back, one screen at a time, with every answer still in place.
-    await user.click(screen.getByRole('button', { name: /change my answer/i }))
+    await user.click(screen.getByRole('button', { name: /^back$/i }))
     await user.click(screen.getByRole('button', { name: /^back$/i }))
 
     expect(
@@ -2616,7 +2612,7 @@ describe('moving through the three new steps', () => {
     expect(readStoredDraft()).toBeNull()
   })
 
-  it('creates no Journey and reaches no screen past Effort', async () => {
+  it('reaches Summary without creating a Journey until Start Day 1 is pressed', async () => {
     const user = userEvent.setup()
     renderWithStoredDraft(
       storedPhase2BDraft({
@@ -2630,13 +2626,24 @@ describe('moving through the three new steps', () => {
     await screen.findByRole('heading', { level: 1, name: EFFORT_QUESTION })
 
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    await screen.findByText(/not built yet/i)
+    await screen.findByRole('heading', { name: 'Your Journey', level: 1 })
 
-    // The word this app must not use yet, and the data it must not invent.
-    expect(document.body.textContent ?? '').not.toMatch(/day 1/i)
+    expect(window.localStorage.getItem(ASCEND_JOURNEY_KEY)).toBeNull()
     expect(readStoredDraft()).not.toHaveProperty('journey')
     expect(readStoredDraft()).not.toHaveProperty('journeyId')
     expect(readStoredDraft()).not.toHaveProperty('growthPoints')
+    const links = screen.getAllByRole('link', { name: /^Edit / })
+    expect(links).toHaveLength(6)
+    expect(links.map((link) => link.getAttribute('aria-label'))).toEqual([
+      'Edit Growth Areas', 'Edit Goal', 'Edit Why this matters',
+      'Edit Duration', 'Edit Milestones', 'Edit Daily Effort',
+    ])
+    const milestoneSection = screen.getByRole('heading', { name: 'Milestones' }).closest('section')!
+    expect(within(milestoneSection).getByRole('listitem').textContent).toBe('Run 5 km')
+    await user.click(screen.getByRole('button', { name: 'Start Day 1' }))
+    expect(await screen.findByRole('heading', { name: 'Today', level: 1 })).toBeInTheDocument()
+    expect(window.localStorage.getItem(ASCEND_JOURNEY_KEY)).not.toBeNull()
+    expect(readStoredDraft()).toBeNull()
   })
 })
 

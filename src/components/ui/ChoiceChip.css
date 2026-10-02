@@ -37,8 +37,11 @@
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard);
+    border-color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-instant) var(--ease-standard);
 }
+
+.choice-chip:active { transform: scale(0.98); }
 
 .choice-chip:hover {
   background-color: var(--surface-sunken);
@@ -57,7 +60,7 @@
  * stops the row jumping under the finger.
  */
 .choice-chip__tick {
-  inline-size: 1em;
+  inline-size: 18px;
   flex: none;
   text-align: center;
   font-weight: var(--weight-bold);

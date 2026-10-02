@@ -34,12 +34,18 @@
   outline: none;
 }
 
-/*
- * The action area sits below the fold on a long screen and stays put.
- * Onboarding is short — a few taps — so a sticky footer means the
- * Continue button is always within thumb reach without scrolling past a
- * list of chips every time.
- */
+.onboarding__content {
+  animation: ascend-enter var(--duration-normal) var(--ease-out) both;
+}
+
+.areas__composer,
+.number-choice__composer,
+.milestones__composer,
+.milestones__item {
+  animation: ascend-enter var(--duration-normal) var(--ease-out) both;
+}
+
+/* Continue and Back follow the answer with a consistent rhythm. */
 .onboarding__actions {
   display: flex;
   flex-direction: column;

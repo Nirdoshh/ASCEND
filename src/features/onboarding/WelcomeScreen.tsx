@@ -63,7 +63,7 @@ export function WelcomeScreen() {
           </Button>
 
           <p className="welcome__footnote text-sm text-muted">
-            V1 supports one active Journey. Finish or delete it before starting a new one.
+            Your daily plan and completed actions are waiting on Today and Progress.
           </p>
         </div>
       </div>
@@ -94,8 +94,8 @@ export function WelcomeScreen() {
       <p className="welcome__lead">One meaningful step at a time.</p>
 
       <p className="welcome__detail text-secondary">
-        ASCEND helps you pick what to work on, then helps you actually do it. You can change anything
-        later, and nothing here is permanent.
+        Choose what matters to you, then turn it into small daily actions.
+        Review your answers before starting your Journey.
       </p>
 
       <div className="onboarding__actions">

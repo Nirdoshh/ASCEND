@@ -1,6 +1,7 @@
 .progress-screen {
   max-inline-size: var(--content-max);
   margin-inline: auto;
+  animation: ascend-appear var(--duration-normal) var(--ease-out) both;
 }
 
 .progress-screen .screen-header {
@@ -86,6 +87,18 @@
 
 @media (max-width: 30rem) {
   .progress-history {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .progress-history__day {
+    display: grid;
+    grid-template-columns: 3em minmax(0, 1fr) auto;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .progress-history__weekday,
+  .progress-history__day time {
+    font-size: var(--text-sm);
   }
 }

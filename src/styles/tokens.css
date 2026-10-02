@@ -179,6 +179,8 @@
   --tap-min: 2.75rem; /* 44px — WCAG 2.2 target size (AA) */
   --header-height: 3.5rem;
   --nav-height: 4rem;
+  /* Runtime-measured when enlarged text makes the mobile bar taller. */
+  --mobile-nav-height: var(--nav-height);
   --content-pad-x: var(--space-4);
 }
 
@@ -215,8 +217,8 @@
 
     /* A slightly lighter fill keeps buttons legible on dark surfaces. */
     --color-accent: #4f46e5;
-    --color-accent-hover: #6366f1;
-    --color-accent-active: #818cf8;
+    --color-accent-hover: #554de8;
+    --color-accent-active: #4338ca;
     --color-accent-text: #a5b4fc; /* 8.56:1 on --surface-raised */
     --color-accent-subtle: #1e1b4b;
 
@@ -257,8 +259,8 @@
   --focus-ring: #a5b4fc; /* 9.48:1 on --surface-page */
 
   --color-accent: #4f46e5;
-  --color-accent-hover: #6366f1;
-  --color-accent-active: #818cf8;
+  --color-accent-hover: #554de8;
+  --color-accent-active: #4338ca;
   --color-accent-text: #a5b4fc; /* 8.56:1 on --surface-raised */
   --color-accent-subtle: #1e1b4b;
 

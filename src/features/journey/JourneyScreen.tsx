@@ -1,24 +1,23 @@
 import { ScreenHeader } from '../../app/ScreenHeader'
-import { Card, EmptyState } from '../../components/ui'
+import { Link } from 'react-router-dom'
+import { Card } from '../../components/ui'
 
 /**
  * JOURNEY — "Where am I going?"
  *
- * Phase 1 ships the shell only. The timeline, milestones and progress
- * markers arrive in Phase 5.
+ * Journey management is not available. Keep this screen honest about
+ * the existing daily-action experience rather than implying setup was lost.
  */
 export function JourneyScreen() {
   return (
     <>
       <ScreenHeader title="Journey">
-        <p>Where you are going, and the milestones along the way.</p>
+        <p>One meaningful action at a time.</p>
       </ScreenHeader>
 
-      <Card>
-        <EmptyState
-          title="No journey yet"
-          description="Your Journey appears here once you choose a goal, say why it matters, and pick how long you want to take."
-        />
+      <Card title="Your Journey is underway">
+        <p className="text-secondary">Your daily plan is on Today. Progress shows the actions you have recorded.</p>
+        <Link className="action-link" to="/today">Go to Today</Link>
       </Card>
     </>
   )

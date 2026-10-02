@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 import { cn } from '../../lib/cn'
+import { Icon } from './Icon'
 import './ChoiceChip.css'
 
 export interface ChoiceChipProps
@@ -62,7 +63,7 @@ export function ChoiceChip({ selected, className, children, ...rest }: ChoiceChi
         which is the part that matters.
       */}
       <span className="choice-chip__tick" aria-hidden="true">
-        {selected ? '✓' : ''}
+        {selected ? <Icon name="check" size={18} /> : null}
       </span>
       <span className="choice-chip__label">{children}</span>
     </button>

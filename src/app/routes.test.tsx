@@ -55,6 +55,8 @@ describe('routes', () => {
     screen.getByRole('link', { name: /^Progress/ }).focus()
     await user.keyboard('{Enter}')
     await screen.findByRole('heading', { name: 'Progress', level: 1 })
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(window.scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: 'instant' })
     expect(screen.getByRole('link', { name: /^Progress/ })).toHaveAttribute('aria-current', 'page')
     screen.getByRole('link', { name: /^Today/ }).focus()
     await user.keyboard('{Enter}')

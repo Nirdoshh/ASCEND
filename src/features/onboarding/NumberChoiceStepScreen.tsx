@@ -46,14 +46,6 @@ export interface NumberChoiceStepScreenProps {
   onContinue: () => void
   /** Where the visible Back control goes. Always a real URL. */
   backTo: string
-  /**
-   * Set on a step that is the last one this build can show.
-   *
-   * After Continue, the CTA is replaced by this honest note plus a way back to
-   * the answer. The Daily Effort screen is where Phase 2C stops, so it passes
-   * this; the Duration screen has a real next question and does not.
-   */
-  finishedMessage?: string
 }
 
 /**
@@ -115,13 +107,11 @@ export function NumberChoiceStepScreen({
   validation,
   onContinue,
   backTo,
-  finishedMessage,
 }: NumberChoiceStepScreenProps) {
   const navigate = useNavigate()
 
   const [field, setField] = useState<HTMLInputElement | null>(null)
   const [problem, setProblem] = useState<string | undefined>(undefined)
-  const [finished, setFinished] = useState(false)
 
   /*
    * A stored value that is not one of the presets is the case that has to show
@@ -133,6 +123,16 @@ export function NumberChoiceStepScreen({
 
   const [customOpen, setCustomOpen] = useState(storedButNotPreset)
   const [customText, setCustomText] = useState(storedButNotPreset ? String(value) : '')
+  const customButtonRef = useRef<HTMLButtonElement>(null)
+  const restoreCustomFocus = useRef(false)
+
+  useEffect(() => {
+    if (customOpen) field?.focus()
+    else if (restoreCustomFocus.current) {
+      customButtonRef.current?.focus()
+      restoreCustomFocus.current = false
+    }
+  }, [customOpen, field])
 
   // The value the field was last seeded from, so the effect below can tell a
   // NEW unusable value from a re-render of the same one. It must not reset the
@@ -149,7 +149,8 @@ export function NumberChoiceStepScreen({
     setProblem(undefined)
   }, [storedButNotPreset, value])
 
-  const closeCustom = () => {
+  const closeCustom = (restore = false) => {
+    restoreCustomFocus.current = restore
     setCustomOpen(false)
     setProblem(undefined)
     // Re-seed from what is actually stored, so cancelling is a real cancel
@@ -174,14 +175,10 @@ export function NumberChoiceStepScreen({
     }
 
     setProblem(undefined)
+    restoreCustomFocus.current = true
     setCustomOpen(false)
     seededFrom.current = result.value
     onSelect(result.value)
-  }
-
-  const onContinuePressed = () => {
-    onContinue()
-    setFinished(finishedMessage !== undefined)
   }
 
   return (
@@ -248,62 +245,36 @@ export function NumberChoiceStepScreen({
               <Button type="submit" fullWidth>
                 Use this
               </Button>
-              <Button variant="quiet" onClick={closeCustom}>
+              <Button variant="quiet" onClick={() => closeCustom(true)}>
                 Cancel
               </Button>
             </div>
           </form>
         ) : (
-          <Button variant="secondary" onClick={() => setCustomOpen(true)}>
+          <Button ref={customButtonRef} variant="secondary" onClick={() => setCustomOpen(true)}>
             {customLabel}
           </Button>
         )}
       </div>
 
       <div className="onboarding__actions">
-        {finished && finishedMessage ? (
-          <>
-            {/*
-              The boundary of this build, stated plainly. Phase 2D creates the
-              Journey, and a Continue button that quietly went nowhere — or a
-              success screen for something that has not been built — would be
-              worse than admitting it.
-            */}
-            <p className="number-choice__boundary" role="status">
-              {finishedMessage}
-            </p>
-            <Button variant="secondary" fullWidth onClick={() => setFinished(false)}>
-              Change my answer
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              variant="primary"
-              size="lg"
-              fullWidth
-              disabled={!validation.valid}
-              onClick={onContinuePressed}
-            >
-              Continue
-            </Button>
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          disabled={!validation.valid}
+          onClick={onContinue}
+        >
+          Continue
+        </Button>
 
-            {/*
-              One paragraph, always present, whose text changes. Keeping the
-              same node means the polite live region announces the move from
-              "choose something" to the chosen answer, which is the confirmation
-              a user gets for a choice that produces no visible change
-              elsewhere on the screen.
-            */}
-            <p className="number-choice__summary text-sm text-muted" role="status">
-              {validation.valid ? `${value} ${unit}. You can change this later.` : validation.message}
-            </p>
+        <p className="number-choice__summary text-sm text-muted" role="status">
+          {validation.valid ? `${value} ${unit}. Review this before starting.` : validation.message}
+        </p>
 
-            <Button variant="quiet" onClick={() => void navigate(backTo)}>
-              Back
-            </Button>
-          </>
-        )}
+        <Button variant="quiet" onClick={() => void navigate(backTo)}>
+          Back
+        </Button>
       </div>
     </div>
   )

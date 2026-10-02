@@ -1,6 +1,6 @@
 import { ScreenHeader } from '../../app/ScreenHeader'
 import { usePreferences } from '../../app/PreferencesProvider'
-import { Card, EmptyState } from '../../components/ui'
+import { Card } from '../../components/ui'
 import './YouScreen.css'
 
 const THEME_LABEL: Record<'system' | 'light' | 'dark', string> = {
@@ -12,8 +12,7 @@ const THEME_LABEL: Record<'system' | 'light' | 'dark', string> = {
 /**
  * YOU — "What am I working toward and how should ASCEND work for me?"
  *
- * This is the only Phase 1 screen that shows real data, and it is real
- * on purpose: it reads the saved preferences through the repository.
+ * Reads saved preferences through the repository.
  * That makes the whole layering visible and testable in one place:
  *
  *   UI  ->  usePreferences()  ->  PreferencesRepository  ->  Web Storage
@@ -28,7 +27,7 @@ export function YouScreen() {
   return (
     <>
       <ScreenHeader title="You">
-        <p>What you are working toward, and how ASCEND should work for you.</p>
+        <p>A little space to make ASCEND feel comfortable.</p>
       </ScreenHeader>
 
       <div className="stack-lg">
@@ -60,17 +59,11 @@ export function YouScreen() {
             </div>
           </dl>
           <p className="text-sm text-muted preference-list__note">
-            Use the control in the top right to change it. More preferences — motion,
-            reminders, sounds — arrive with the features that need them.
+            Use the theme control in the top right to switch between light, dark,
+            and your device setting.
           </p>
         </Card>
 
-        <Card title="Your goal and your why">
-          <EmptyState
-            title="Not set up yet"
-            description="Your goal and your reason for starting it will be saved here, and shown to you on the days you need reminding."
-          />
-        </Card>
       </div>
     </>
   )

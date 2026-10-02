@@ -130,9 +130,35 @@ svg {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Remove spatial motion as well as its timing. State remains visible. */
+@media (prefers-reduced-motion: reduce) {
+  .button:active:not(:disabled),
+  .choice-chip:active,
+  .today__step-completion input:active:not(:disabled) {
+    transform: none !important;
+  }
+
+  .today__step-row,
+  .today__feedback,
+  .today__composer,
+  .today__win-display,
+  .today__complete-ack,
+  .onboarding__content,
+  .areas__composer,
+  .number-choice__composer,
+  .milestones__composer,
+  .milestones__item,
+  .progress-screen {
+    animation: none !important;
+    transform: none !important;
   }
 }
 

@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ScreenHeader } from '../../app/ScreenHeader'
-import { Button, TextField } from '../../components/ui'
+import { Button, Icon, TextField } from '../../components/ui'
 import { MAX_GROWTH_AREA_NAME_LENGTH } from '../../domain/growthAreas'
 import { isGrowthAreaStepValid } from '../../domain/onboardingValidation'
 import { GrowthAreaChip } from './GrowthAreaChip'
@@ -45,6 +45,17 @@ export function GrowthAreasScreen() {
   const [name, setName] = useState('')
   const [problem, setProblem] = useState<string | undefined>(undefined)
   const [justAdded, setJustAdded] = useState<string | null>(null)
+  const fieldRef = useRef<HTMLInputElement>(null)
+  const createRef = useRef<HTMLButtonElement>(null)
+  const restoreFocus = useRef(false)
+
+  useEffect(() => {
+    if (creating) fieldRef.current?.focus()
+    else if (restoreFocus.current) {
+      createRef.current?.focus()
+      restoreFocus.current = false
+    }
+  }, [creating])
 
   const suggested = areas.filter((area) => area.kind === 'suggested')
   const custom = areas.filter((area) => area.kind === 'custom')
@@ -62,6 +73,7 @@ export function GrowthAreasScreen() {
   const chosenCount = areas.filter((area) => isSelected(area.id)).length
 
   const closeComposer = () => {
+    restoreFocus.current = true
     setCreating(false)
     setName('')
     setProblem(undefined)
@@ -86,6 +98,7 @@ export function GrowthAreasScreen() {
       // it refuses to add anything says two contradictory things at once,
       // and the refusal is the one that is about to matter.
       setJustAdded(null)
+      fieldRef.current?.focus()
       return
     }
 
@@ -107,7 +120,7 @@ export function GrowthAreasScreen() {
   return (
     <>
       <ScreenHeader title="What do you want to improve?">
-        <p>Choose anything that matters to you. You can change this later.</p>
+        <p>Choose anything that matters to you. Review your choices before starting.</p>
       </ScreenHeader>
 
       <section className="areas" aria-labelledby="suggested-heading">
@@ -161,6 +174,7 @@ export function GrowthAreasScreen() {
         {creating ? (
           <form className="areas__composer" onSubmit={onSubmit} noValidate>
             <TextField
+              ref={fieldRef}
               label="What do you want to improve?"
               hint="Anything you like — Piano, Cooking, Public speaking."
               placeholder="Piano"
@@ -192,8 +206,8 @@ export function GrowthAreasScreen() {
             ) : null}
           </form>
         ) : (
-          <Button variant="secondary" onClick={() => setCreating(true)}>
-            + Create your own
+          <Button ref={createRef} variant="secondary" leadingIcon={<Icon name="plus" size={18} />} onClick={() => setCreating(true)}>
+            Create your own
           </Button>
         )}
       </section>

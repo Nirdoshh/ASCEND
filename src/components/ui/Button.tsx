@@ -41,8 +41,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  *     submits it, which is one of the most common real bugs in apps
  *     that add a form later.
  *   - Every size is at least 44px tall (WCAG 2.2 target size).
- *   - While loading, the button stays enabled in the DOM but ignores
- *     clicks and exposes aria-busy, so focus is not lost mid-action.
+ *   - Loading disables submission and exposes aria-busy.
  */
 export function Button({
   variant = 'primary',

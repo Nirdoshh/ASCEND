@@ -2,6 +2,7 @@ import { ScreenHeader } from '../../app/ScreenHeader'
 import {
   Button,
   Card,
+  ChoiceChip,
   EmptyState,
   ErrorState,
   Icon,
@@ -30,7 +31,7 @@ import './DesignSystemScreen.css'
 export function DesignSystemScreen() {
   return (
     <>
-      <ScreenHeader title="Design system" eyebrow="Phase 1 reference">
+      <ScreenHeader title="Design system" eyebrow="ASCEND UI reference">
         <p>
           Every value below comes from a token in <code>src/styles/tokens.css</code>.
           Components never hardcode colour, radius or duration.
@@ -40,10 +41,10 @@ export function DesignSystemScreen() {
       <div className="stack-lg">
         <Section title="Buttons" description="One dominant action per screen.">
           <div className="ds-row">
-            <Button variant="primary">Primary</Button>
-            <Button variant="secondary">Secondary</Button>
-            <Button variant="quiet">Quiet</Button>
-            <Button variant="danger">Danger</Button>
+            <Button variant="primary" leadingIcon={<Icon name="save" size={18} />}>Save</Button>
+            <Button variant="secondary" leadingIcon={<Icon name="plus" size={18} />}>Add Step</Button>
+            <Button variant="quiet" leadingIcon={<Icon name="edit" size={18} />}>Edit</Button>
+            <Button variant="danger" leadingIcon={<Icon name="remove" size={18} />}>Remove</Button>
           </div>
           <div className="ds-row">
             <Button size="lg" variant="primary">
@@ -58,28 +59,35 @@ export function DesignSystemScreen() {
         </Section>
 
         <Section title="Inputs" description="Real labels, never placeholders as instructions.">
-          <TextField label="Goal" placeholder="Become capable of building and shipping" hint="One sentence is enough." />
+          <TextField label="Goal" placeholder="Run my first 10K" hint="One sentence is enough." />
           <TextField label="How long do you realistically have?" labelSuffix="most days" />
           <TextField label="Today's Win" error="Give this a short, concrete outcome." defaultValue="" />
-          <TextAreaField label="What made things difficult today?" hint="Optional. A few words is plenty." />
+          <TextAreaField label="Why does this matter to you?" hint="A sentence in your own words is plenty." />
+        </Section>
+
+        <Section title="Choices" description="Selection keeps the label still and adds a check.">
+          <div className="ds-row">
+            <ChoiceChip selected>Fitness</ChoiceChip>
+            <ChoiceChip selected={false}>Reading</ChoiceChip>
+          </div>
         </Section>
 
         <Section title="Progress" description="Always paired with text, never colour alone.">
           <ProgressBar label="Today's steps" value={2} max={4} />
-          <ProgressBar label="This week" value={6} max={7} valueText="6 of 7 days active, 86% consistency" />
+          <ProgressBar label="Recent activity" value={3} max={7} valueText="Active on 3 of the last 7 days" />
           <ProgressBar label="Finished" value={4} max={4} tone="success" />
           <ProgressBar label="Clamped against bad input" value={99} max={4} />
         </Section>
 
         <Section title="Cards">
-          <Card eyebrow="Today" title="Finish and deploy the database integration" description="45 minutes of focused work.">
+          <Card eyebrow="Today’s Win" title="Go for a walk before lunch" description="One meaningful action.">
             <p className="text-secondary">
               Cards are surfaces, not buttons. Anything actionable inside stays a real
               button or link so it stays keyboard reachable.
             </p>
           </Card>
           <Card tone="sunken" title="Sunken tone" />
-          <Card tone="accent" title="Accent tone" description="Used for the WHY and for recovery messaging." />
+          <Card tone="accent" title="Accent tone" description="Reserve emphasis for meaningful actions and states." />
         </Section>
 
         <Section title="States" description="Every empty state must help the user move forward.">
@@ -108,7 +116,7 @@ export function DesignSystemScreen() {
             {(['today', 'journey', 'progress', 'you', 'system', 'sun', 'moon'] as const).map(
               (name) => (
                 <span className="ds-icon" key={name}>
-                  <Icon name={name} size={24} />
+                  <Icon name={name} size={20} />
                   <span className="ds-icon__label">{name}</span>
                 </span>
               ),

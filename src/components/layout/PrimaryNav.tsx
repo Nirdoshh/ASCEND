@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useLayoutEffect, useRef } from 'react'
 
 import { Icon, type IconName } from '../ui/Icon'
 import './PrimaryNav.css'
@@ -55,8 +56,26 @@ const NAV_ITEMS: NavItem[] = [
  * them invisible, which is a common and serious accessibility bug.
  */
 export function PrimaryNav() {
+  const navRef = useRef<HTMLElement>(null)
+
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    if (!nav) return
+    const shell = nav.closest<HTMLElement>('.app-shell')
+    const reserveHeight = () => {
+      const height = nav.getBoundingClientRect().height
+      if (height > 0) shell?.style.setProperty('--mobile-nav-height', `${height}px`)
+    }
+    reserveHeight()
+    if (typeof ResizeObserver === 'undefined') return
+    // Text enlargement and safe areas can change the bar's actual height.
+    const observer = new ResizeObserver(reserveHeight)
+    observer.observe(nav)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <nav className="primary-nav" aria-label="Main">
+    <nav ref={navRef} className="primary-nav" aria-label="Main">
       <ul className="primary-nav__list">
         {NAV_ITEMS.map((item) => (
           <li className="primary-nav__item" key={item.to}>

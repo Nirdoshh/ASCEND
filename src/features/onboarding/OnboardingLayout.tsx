@@ -1,6 +1,7 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 
 import { RouteErrorBoundary } from '../../app/RouteErrorBoundary'
+import { useRouteFocus } from '../../app/useRouteFocus'
 import type { OnboardingDraftRepository } from '../../data/repositories'
 import { OnboardingDraftProvider } from './OnboardingDraftProvider'
 import { StorageNotice } from './StorageNotice'
@@ -34,6 +35,8 @@ import './OnboardingLayout.css'
  * and no screen ever learns which one it got.
  */
 export function OnboardingLayout({ repository }: { repository?: OnboardingDraftRepository }) {
+  const mainRef = useRouteFocus()
+  const { pathname } = useLocation()
   return (
     <RouteErrorBoundary>
       <a className="skip-link" href="#main">
@@ -44,8 +47,8 @@ export function OnboardingLayout({ repository }: { repository?: OnboardingDraftR
         <OnboardingDraftProvider repository={repository}>
           <StorageNotice />
 
-          <main className="onboarding__main" id="main" tabIndex={-1}>
-            <Outlet />
+          <main ref={mainRef} className="onboarding__main" id="main" tabIndex={-1}>
+            <div key={pathname} className="onboarding__content"><Outlet /></div>
           </main>
         </OnboardingDraftProvider>
       </div>

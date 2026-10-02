@@ -48,18 +48,6 @@ export interface AnswerStepScreenProps {
   onContinue: () => void
   /** Where the visible Back control goes. Always a real URL. */
   backTo: string
-  /**
-   * Set on a step that is the last one this build can show. After
-   * Continue, the CTA is replaced by this honest note plus a way back.
-   *
-   * Phase 2B uses it on the WHY, where "the next question is not built
-   * yet" is the truthful thing to say and a button that goes nowhere would
-   * be a lie. Nothing about the stored draft changes: after a refresh the
-   * answer is still there and Continue is still pressable, which is a
-   * smaller cost than recording a "they finished" flag that would then
-   * have to be kept in step with the answers themselves.
-   */
-  finishedMessage?: string
 }
 
 /**
@@ -105,12 +93,10 @@ export function AnswerStepScreen({
   validation,
   onContinue,
   backTo,
-  finishedMessage,
 }: AnswerStepScreenProps) {
   const navigate = useNavigate()
   const [field, setField] = useState<HTMLTextAreaElement | null>(null)
   const [attempted, setAttempted] = useState(false)
-  const [finished, setFinished] = useState(false)
 
   // Shown only after a real attempt. An empty box on arrival is not a
   // mistake, and announcing "tell us what you would love to achieve" at
@@ -134,7 +120,6 @@ export function AnswerStepScreen({
     }
 
     setAttempted(false)
-    setFinished(finishedMessage !== undefined)
     onContinue()
   }
 
@@ -147,6 +132,7 @@ export function AnswerStepScreen({
       <div className="answer-step__field">
         <TextAreaField
           label={question}
+          labelHidden
           hint={hint}
           error={error}
           placeholder={placeholder}
@@ -173,32 +159,13 @@ export function AnswerStepScreen({
       </div>
 
       <div className="onboarding__actions">
-        {finished && finishedMessage ? (
-          <>
-            {/*
-              The boundary of this build, stated plainly. Phase 2C's
-              duration question does not exist yet, and a Continue button
-              that quietly goes nowhere — or a success screen for something
-              that has not been built — would be worse than admitting it.
-            */}
-            <p className="answer-step__boundary" role="status">
-              {finishedMessage}
-            </p>
-            <Button variant="secondary" fullWidth onClick={() => setFinished(false)}>
-              Change my answer
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button type="submit" variant="primary" size="lg" fullWidth>
-              Continue
-            </Button>
+        <Button type="submit" variant="primary" size="lg" fullWidth>
+          Continue
+        </Button>
 
-            <Button variant="quiet" onClick={() => void navigate(backTo)}>
-              Back
-            </Button>
-          </>
-        )}
+        <Button variant="quiet" onClick={() => void navigate(backTo)}>
+          Back
+        </Button>
       </div>
     </form>
   )

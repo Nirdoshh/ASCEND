@@ -110,6 +110,27 @@
   text-align: center;
 }
 
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-medium);
+  text-underline-offset: var(--space-1);
+}
+
+/* A small local entrance, never a wait before input becomes available. */
+@keyframes ascend-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ascend-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* A short all-caps label above a value or a section. */
 .eyebrow {
   font-size: var(--text-xs);

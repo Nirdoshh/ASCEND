@@ -25,11 +25,22 @@
   padding: var(--space-6) var(--content-pad-x) var(--space-12);
 }
 
-.app-shell__main:focus {
-  /* The main region receives focus from the skip link. Keep a restrained
-   * ring so keyboard users can see where focus landed. */
+.app-shell__main:focus-visible {
+  outline: none;
+}
+
+.app-shell__main:focus-visible h1 {
+  /* Mark the destination heading rather than outlining the whole page. */
+  inline-size: fit-content;
+  max-inline-size: 100%;
   outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: calc(var(--focus-ring-offset) * -1);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (max-width: 47.999rem) {
+  .app-shell__main :is(button, input, textarea, a) {
+    scroll-margin-block: var(--space-4) calc(var(--mobile-nav-height, var(--nav-height)) + var(--space-4));
+  }
 }
 
 /* Route error ---------------------------------------------------------- */
@@ -40,9 +51,15 @@
   margin-block-start: var(--space-8);
 }
 
-/* Bottom padding on mobile so the sticky nav never covers content. */
+/* Reserve the fixed navigation and the device safe area. */
 .app-shell__nav-spacer {
-  block-size: var(--nav-height);
+  block-size: var(--mobile-nav-height, calc(var(--nav-height) + env(safe-area-inset-bottom, 0px)));
+}
+
+@media (max-width: 22rem) {
+  .app-shell__nav-spacer {
+    block-size: var(--mobile-nav-height, calc(6rem + env(safe-area-inset-bottom, 0px)));
+  }
 }
 
 @media (min-width: 48rem) {

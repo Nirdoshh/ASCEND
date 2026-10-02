@@ -1,12 +1,4 @@
-/*
- * Growth Areas screen.
- *
- * Mobile-first: the chip list is a wrapping flex row so it needs no
- * grid, no columns and no measurement. Ten chips become a tidy block on
- * a desktop and a natural two-per-row pile on a 375px phone without a
- * single media query, which is also why there is no breakpoint logic
- * to get wrong at 200% zoom.
- */
+/* Growth Area choices share a compact grid with wrapping labels. */
 
 .areas {
   margin-block-start: var(--space-8);
@@ -18,15 +10,29 @@
   font-weight: var(--weight-semibold);
   /* Matches the eyebrow treatment used elsewhere so the two section
    * headings do not compete with the question for attention. */
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .areas__list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-2);
+}
+
+.areas__list .choice-chip {
+  padding-inline: var(--space-2);
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 22rem) {
+  .areas__list { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (min-width: 40rem) {
+  .areas__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .areas__composer {

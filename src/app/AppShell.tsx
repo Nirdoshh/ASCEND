@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { AppHeader } from '../components/layout/AppHeader'
 import { PrimaryNav } from '../components/layout/PrimaryNav'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
+import { useRouteFocus } from './useRouteFocus'
 import './AppShell.css'
 
 /**
@@ -27,6 +28,7 @@ import './AppShell.css'
  * that, Safari in particular will scroll but not move focus.
  */
 export function AppShell({ children }: { children?: ReactNode }) {
+  const mainRef = useRouteFocus()
   return (
     <RouteErrorBoundary>
       <a className="skip-link" href="#main">
@@ -43,7 +45,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
             tabIndex={-1} + id="main": the skip link's destination.
             See the note above about why focus, not just scroll.
           */}
-          <main className="app-shell__main" id="main" tabIndex={-1}>
+          <main ref={mainRef} className="app-shell__main" id="main" tabIndex={-1}>
             {children ?? <Outlet />}
           </main>
         </div>

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 
 import { ScreenHeader } from '../../app/ScreenHeader'
@@ -138,7 +138,7 @@ export function SummaryScreen() {
           <ul>
             {incompleteSteps.map((s) => (
               <li key={s.step}>
-                <a href={getEditHref(s.step)}>{getStepLabel(s.step)}</a> — {s.message}
+                <Link to={getEditHref(s.step)}>{getStepLabel(s.step)}</Link> — {s.message}
               </li>
             ))}
           </ul>
@@ -185,9 +185,9 @@ function SummarySection({
     <section className={`summary__section ${isInvalid ? 'summary__section--invalid' : ''}`}>
       <div className="summary__section-header">
         <h2>{title}</h2>
-        <a href={editHref} className="summary__edit-link">
+        <Link to={editHref} className="summary__edit-link" aria-label={`Edit ${title}`}>
           Edit
-        </a>
+        </Link>
       </div>
       <div className="summary__section-content">
         {content}
@@ -223,7 +223,7 @@ function renderMilestones(draft: { milestones?: readonly { id: string; text: str
   return (
     <ul>
       {milestones.map((m) => (
-        <li key={m.id}>• {m.text}</li>
+        <li key={m.id}>{m.text}</li>
       ))}
     </ul>
   )

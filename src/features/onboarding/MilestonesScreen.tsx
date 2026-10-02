@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ScreenHeader } from '../../app/ScreenHeader'
-import { Button, TextField } from '../../components/ui'
+import { Button, Icon, TextField } from '../../components/ui'
 import { MAX_MILESTONE_LENGTH, MAX_MILESTONES } from '../../domain/milestone'
 import type { DraftMilestone } from '../../domain/milestone'
 import { isMilestoneStepValid } from '../../domain/onboardingValidation'
@@ -211,6 +211,7 @@ export function MilestonesScreen() {
                 <div className="milestones__item-actions">
                   <Button
                     variant="quiet"
+                    leadingIcon={<Icon name="edit" size={18} />}
                     ref={(element) => {
                       // A ref callback returning nothing, because the cleanup
                       // form would delete the entry on every re-render when it
@@ -232,6 +233,7 @@ export function MilestonesScreen() {
 
                   <Button
                     variant="quiet"
+                    leadingIcon={<Icon name="remove" size={18} />}
                     aria-label={`Remove “${milestone.text}”`}
                     onClick={() => onRemove(milestone)}
                   >
@@ -251,8 +253,8 @@ export function MilestonesScreen() {
               That is {MAX_MILESTONES} — remove one to add another.
             </p>
           ) : (
-            <Button variant="secondary" ref={addRef} onClick={openAdd}>
-              + Add a milestone
+            <Button variant="secondary" ref={addRef} leadingIcon={<Icon name="plus" size={18} />} onClick={openAdd}>
+              Add a milestone
             </Button>
           )
         ) : (
@@ -319,7 +321,7 @@ export function MilestonesScreen() {
           announced without moving the user's focus for them.
         */}
         <p className="milestones__status text-sm text-muted" role="status">
-          {confirmation ?? (step.valid ? 'These are yours. You can change them later.' : step.message)}
+          {confirmation ?? (step.valid ? 'These are yours. Review them before starting.' : step.message)}
         </p>
 
         <Button variant="quiet" onClick={() => void navigate('/onboarding/duration')}>

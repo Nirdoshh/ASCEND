@@ -2,6 +2,7 @@ import { Navigate, useLoaderData } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 
 import { AppShell } from './AppShell'
+import { TodayLoading } from '../features/today/TodayLoading'
 
 import { createJourneyRepository } from '../data/repositories/journeyRepository'
 import { createOnboardingDraftRepository } from '../data/repositories/onboardingDraftRepository'
@@ -109,7 +110,7 @@ export function TodayRedirect() {
     case 'today':
       return (
         <AppShell>
-          <Suspense fallback={null}>
+          <Suspense fallback={<TodayLoading />}>
             <TodayScreen />
           </Suspense>
         </AppShell>

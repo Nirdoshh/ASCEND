@@ -6,6 +6,8 @@ import './TextField.css'
 
 interface BaseTextFieldProps {
   label: string
+  /** Retain the accessible name when the screen heading states the question. */
+  labelHidden?: boolean
   hint?: ReactNode
   error?: string | undefined
   /** Rendered at the end of the label row, e.g. an optional marker. */
@@ -49,10 +51,6 @@ export interface TextAreaFieldProps
    * ClassAttributes), so it has to be declared — and because this is React
    * 19 it needs no `forwardRef` wrapper: `ref` arrives as an ordinary
    * prop and `{...rest}` passes it to the <textarea>.
-   *
-   * Declared on the textarea only. Nothing in ASCEND needs to focus a
-   * single-line input, and an unused prop is a prop somebody will
-   * eventually use for the wrong thing.
    */
   ref?: Ref<HTMLTextAreaElement>
 }
@@ -76,6 +74,7 @@ const describedBy = (id: string, hint: ReactNode, error?: string): string | unde
  */
 export function TextField({
   label,
+  labelHidden = false,
   hint,
   error,
   labelSuffix,
@@ -86,7 +85,7 @@ export function TextField({
 
   return (
     <div className={cn('field', error && 'field--invalid', className)}>
-      <label className="field__label" htmlFor={id}>
+      <label className={labelHidden ? 'visually-hidden' : 'field__label'} htmlFor={id}>
         {label}
         {labelSuffix ? <span className="field__label-suffix">{labelSuffix}</span> : null}
       </label>
@@ -106,6 +105,7 @@ export function TextField({
 
 export function TextAreaField({
   label,
+  labelHidden = false,
   hint,
   error,
   labelSuffix,
@@ -117,7 +117,7 @@ export function TextAreaField({
 
   return (
     <div className={cn('field', error && 'field--invalid', className)}>
-      <label className="field__label" htmlFor={id}>
+      <label className={labelHidden ? 'visually-hidden' : 'field__label'} htmlFor={id}>
         {label}
         {labelSuffix ? <span className="field__label-suffix">{labelSuffix}</span> : null}
       </label>

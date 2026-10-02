@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+
 import {
   DAILY_EFFORT_BOUNDS,
   DAILY_EFFORT_PRESET_MINUTES,
@@ -8,7 +10,7 @@ import { NumberChoiceStepScreen } from './NumberChoiceStepScreen'
 import { useOnboarding } from './OnboardingDraftProvider'
 
 /**
- * Step 7, and the last screen Phase 2C builds — "How much time can you
+ * Step 7 — "How much time can you
  * realistically give this each day?"
  *
  * THE WORD "REALISTICALLY" IS THE WHOLE QUESTION
@@ -31,16 +33,10 @@ import { useOnboarding } from './OnboardingDraftProvider'
  * people, and a floor that excluded it would exclude the person being most
  * truthful — the opposite of what the question is for.
  *
- * WHY THIS ONE ENDS WITH A BOUNDARY NOTE
- *
- * Phase 2D owns the Summary screen and the act of creating a Journey from
- * these answers. There is no screen after this one, so Continue records the
- * answer and says so plainly, the way Phase 2A and 2B did at their own
- * boundaries. A Continue button that quietly did nothing, or a success screen
- * for a Journey that was never created, would be the single most dishonest
- * thing this screen could do.
+ * Continue records the answer and opens the existing Summary for review.
  */
 export function EffortScreen() {
+  const navigate = useNavigate()
   const { draft, setEffort, advanceFrom } = useOnboarding()
 
   return (
@@ -59,9 +55,9 @@ export function EffortScreen() {
       validation={isEffortStepValid(draft)}
       onContinue={() => {
         advanceFrom('daily-effort')
+        void navigate('/onboarding/summary')
       }}
       backTo="/onboarding/milestones"
-      finishedMessage="Your answers are saved. The next part is looking at everything together, and that is not built yet."
     />
   )
 }
