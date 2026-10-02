@@ -1,6 +1,7 @@
 import { validRoadmapRecords, type SystemRoadmap, type RoadmapPhase, type RoadmapStep } from './systemRoadmap'
+import { normalizeDirective, normalizeDirectiveObjective, type SystemDailyDirective, type SystemDirectiveObjective } from './systemDailyDirective'
 
-export const SYSTEM_SCHEMA_VERSION = 2
+export const SYSTEM_SCHEMA_VERSION = 3
 // Path and Goal contracts are unchanged; their record version remains Beta 1.
 const SYSTEM_RECORD_SCHEMA_VERSION = 1
 
@@ -39,6 +40,8 @@ export interface SystemData {
   readonly roadmaps: readonly SystemRoadmap[]
   readonly roadmapPhases: readonly RoadmapPhase[]
   readonly roadmapSteps: readonly RoadmapStep[]
+  readonly directives: readonly SystemDailyDirective[]
+  readonly directiveObjectives: readonly SystemDirectiveObjective[]
 }
 
 const PATH_STATUSES: readonly PathStatus[] = ['ACTIVE', 'PAUSED', 'ARCHIVED']
@@ -145,7 +148,7 @@ export function changeGoalStatus(goal: SystemGoal, status: GoalStatus, now: stri
 }
 
 export function createSystemData(paths: readonly SystemPath[] = [], goals: readonly SystemGoal[] = []): SystemData {
-  return { schemaVersion: SYSTEM_SCHEMA_VERSION, paths: [...paths], goals: [...goals], roadmaps: [], roadmapPhases: [], roadmapSteps: [] }
+  return { schemaVersion: SYSTEM_SCHEMA_VERSION, paths: [...paths], goals: [...goals], roadmaps: [], roadmapPhases: [], roadmapSteps: [], directives: [], directiveObjectives: [] }
 }
 
 /** Suggested starting directions. These are ordinary persisted Path records, not fixtures. */
@@ -182,8 +185,25 @@ export function normalizeSystemData(raw: unknown): SystemData | null {
     goals.push(goal)
   }
   if (!validRoadmapRecords(value, goalIds, new Set([...pathIds, ...goalIds]))) return null
+  if (!Array.isArray(value.directives) || !Array.isArray(value.directiveObjectives)) return null
+  const directiveIds = new Set<string>()
+  const directives: SystemDailyDirective[] = []
+  for (const entry of value.directives) {
+    const directive = normalizeDirective(entry)
+    if (!directive || directiveIds.has(directive.id)) return null
+    directiveIds.add(directive.id)
+    directives.push(directive)
+  }
+  const objectiveIds = new Set<string>()
+  const objectives: SystemDirectiveObjective[] = []
+  for (const entry of value.directiveObjectives) {
+    const objective = normalizeDirectiveObjective(entry)
+    if (!objective || objectiveIds.has(objective.id) || !directiveIds.has(objective.directiveId)) return null
+    objectiveIds.add(objective.id)
+    objectives.push(objective)
+  }
   // Keep original authored text and unknown fields; validation must not truncate.
-  return { ...value, schemaVersion: SYSTEM_SCHEMA_VERSION, paths: value.paths as SystemPath[], goals: value.goals as SystemGoal[], roadmaps: value.roadmaps as SystemRoadmap[], roadmapPhases: value.roadmapPhases as RoadmapPhase[], roadmapSteps: value.roadmapSteps as RoadmapStep[] }
+  return { ...value, schemaVersion: SYSTEM_SCHEMA_VERSION, paths: value.paths as SystemPath[], goals: value.goals as SystemGoal[], roadmaps: value.roadmaps as SystemRoadmap[], roadmapPhases: value.roadmapPhases as RoadmapPhase[], roadmapSteps: value.roadmapSteps as RoadmapStep[], directives, directiveObjectives: objectives }
 }
 
 function normalizePath(raw: unknown): SystemPath | null {
@@ -224,7 +244,7 @@ export function hasNewerSystemSchema(raw: unknown): boolean {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return false
   const value = raw as Record<string, unknown>
   if (typeof value.schemaVersion === 'number' && value.schemaVersion > SYSTEM_SCHEMA_VERSION) return true
-  for (const [records, version] of [[value.paths, 1], [value.goals, 1], [value.roadmaps, 2], [value.roadmapPhases, 2], [value.roadmapSteps, 2]] as const) {
+  for (const [records, version] of [[value.paths, 1], [value.goals, 1], [value.roadmaps, 2], [value.roadmapPhases, 2], [value.roadmapSteps, 2], [value.directives, 1], [value.directiveObjectives, 1]] as const) {
     if (!Array.isArray(records)) continue
     if (records.some((entry: unknown) => typeof entry === 'object' && entry !== null && typeof (entry as Record<string, unknown>).schemaVersion === 'number' && Number((entry as Record<string, unknown>).schemaVersion) > version)) return true
   }
@@ -238,8 +258,9 @@ export function migrateSystemData(raw: unknown): SystemData | null {
   if (hasNewerSystemSchema(value)) return null
   if (value.schemaVersion === 1) {
     // Refuse conflicting unversioned extensions rather than replacing user data.
-    if ('roadmaps' in value || 'roadmapPhases' in value || 'roadmapSteps' in value) return null
-    return normalizeSystemData({ ...value, schemaVersion: 2, roadmaps: [], roadmapPhases: [], roadmapSteps: [] })
+    if ('roadmaps' in value || 'roadmapPhases' in value || 'roadmapSteps' in value || 'directives' in value || 'directiveObjectives' in value) return null
+    return normalizeSystemData({ ...value, schemaVersion: 3, roadmaps: [], roadmapPhases: [], roadmapSteps: [], directives: [], directiveObjectives: [] })
   }
+  if (value.schemaVersion === 2) return normalizeSystemData({ ...value, schemaVersion: 3, directives: [], directiveObjectives: [] })
   return normalizeSystemData(value)
 }

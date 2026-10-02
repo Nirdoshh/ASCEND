@@ -22,7 +22,15 @@ describe('System v2 persistence and migration', () => {
     window.localStorage.setItem(ASCEND_SYSTEM_KEY, bytes)
     const repository = createSystemRepository(createWebStorageStore())
     const migrated = repository.load()!
-    expect(migrated).toEqual({ ...legacy, schemaVersion: 2, roadmaps: [], roadmapPhases: [], roadmapSteps: [] })
+    expect(migrated).toEqual({
+  ...legacy,
+  schemaVersion: 3,
+  roadmaps: [],
+  roadmapPhases: [],
+  roadmapSteps: [],
+  directives: [],
+  directiveObjectives: [],
+})
     expect(window.localStorage.getItem(ASCEND_SYSTEM_KEY)).toBe(bytes)
     expect(repository.save(migrated)).toBe('ok')
     expect(repository.load()?.paths).toEqual(paths)

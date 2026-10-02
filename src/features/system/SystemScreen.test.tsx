@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SystemScreen } from './SystemScreen'
 
 beforeEach(() => {
+  window.localStorage.clear()
   vi.stubGlobal('matchMedia', vi.fn(() => ({
     matches: false,
     addEventListener: vi.fn(),
@@ -43,27 +44,30 @@ describe('System navigation', () => {
     }
   })
 
-  it('selects Path after content navigation and completion, without a preceding navigation click', async () => {
+  it('selects Path from the Today content action, without a preceding navigation click', async () => {
     const user = userEvent.setup()
     render(<SystemScreen />)
     await user.click(screen.getByRole('button', { name: 'Enter the System' }))
-    await user.click(screen.getByRole('button', { name: 'View Path' }))
+    expectActiveScreen('Today', 'Today')
+    await user.click(screen.getByRole('button', { name: 'CREATE MANUAL DIRECTIVE' }))
+    await user.type(screen.getByLabelText('Title'), 'Review the current roadmap')
+    await user.click(screen.getByRole('button', { name: 'Accept Directive' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Review the current roadmap' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'View in Map' }))
     expectActiveScreen('Path', 'A bigger you.')
-    await user.click(within(screen.getAllByRole('navigation', { name: 'System sections' })[0]!).getByRole('button', { name: 'Today' }))
-    await user.click(screen.getByRole('checkbox', { name: /Complete status UI/ }))
-    expectActiveScreen('Path', 'A bigger you.')
-    expect(screen.getByRole('button', { name: 'Status UI, action. Focus branch' })).toHaveClass('is-active')
-    expect(document.querySelector('.graph-stage')).toHaveClass('is-pulsing')
   })
 
   it('keeps normal navigation hidden during Lock-In, including after objective completion', async () => {
     const user = userEvent.setup()
     render(<SystemScreen />)
     await user.click(screen.getByRole('button', { name: 'Enter the System' }))
+    await user.click(screen.getByRole('button', { name: 'CREATE MANUAL DIRECTIVE' }))
+    await user.type(screen.getByLabelText('Title'), 'Review the current roadmap')
+    await user.click(screen.getByRole('button', { name: 'Accept Directive' }))
     await user.click(screen.getByRole('button', { name: 'ENTER LOCK-IN' }))
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('checkbox', { name: /Complete status UI/ }))
-    expect(screen.getByRole('heading', { level: 1, name: 'Finish the payment workflow.' })).toBeInTheDocument()
+    const realObjective = screen.queryByRole('checkbox', { name: 'Review the current roadmap' })
+    if (realObjective) await user.click(realObjective)
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 

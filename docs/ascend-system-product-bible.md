@@ -1,6 +1,6 @@
 # ASCEND SYSTEM — Product Bible
 
-**Status:** ASCEND System Beta 2 — Roadmap Foundation, October 2026
+**Status:** ASCEND System Beta 4 — Roadmap → Today → Completion, October 2026
 **Scope:** Isolated `/system` experience with local-first Paths, Goals, and manual Roadmaps. The approved System UI remains the visual reference (`docs/reference/approved-system-ui.png`). This document records the bounded prototype contract; it does not define a production backend schema.
 
 ## 1. Product vision
@@ -93,7 +93,7 @@ The directive, objectives, timer, Level 18, Rank C, Stability 82%, conditions, e
 
 ## 18. Not implemented
 
-Beta 2 does not implement AI Roadmap generation, Roadmap templates, Node Notes, `[[links]]`, backlinks, a Markdown editor, real Graph Beta, Daily Directive integration or automation, backend, authentication, native app blocking, real timers, XP, Level formulas, Rank formulas, Stability formulas, penalties, production navigation, or a light System theme. Standalone Milestone records remain unimplemented; a Roadmap Step can describe a milestone.
+The System does not implement AI priority or Roadmap generation, automatic personalized scheduling, Roadmap templates, Node Notes, `[[links]]`, backlinks, a Markdown editor, backend, authentication, native app blocking, real timers or Lock-In sessions, XP, Level formulas, Rank formulas, Stability formulas, penalties, a full Daily History UI, Notes, or production navigation. Standalone Milestone records remain unimplemented; a Roadmap Step can describe a milestone.
 
 ## 19. Copyright and originality boundary
 
@@ -102,6 +102,45 @@ ASCEND may take broad conceptual inspiration from progression fiction and games.
 ## 20. Future native requirements
 
 True blocking of apps and sites, reliable background timing, device policy, notifications, and cross-device sessions will require a native or mobile integration with explicit permissions and platform-specific safety behavior. The web prototype cannot provide those guarantees.
+
+## Beta 4 Daily Directive contract
+
+Beta 4 replaces the Today fixture with a persisted Daily Directive in the
+same `ascend:system:v1` System collection. The collection envelope is now
+schema version 3; v1 and v2 records are migrated in memory and only written
+as v3 after a successful user operation. Paths, Goals, Roadmaps, Phases, and
+Steps retain their opaque IDs and authored content. Malformed or newer data is
+left untouched.
+
+A Directive is a dated execution record with an opaque ID, local
+`YYYY-MM-DD` date key, title, optional WHY, source type (`ROADMAP_STEP` or
+`MANUAL`), optional source Step ID, lifecycle status (`ACTIVE`, `COMPLETED`,
+or `ABANDONED`), and timestamps. Directive objectives are separate ordered
+records with stable IDs, completion timestamps, and simple add, edit, reorder,
+complete, undo, and remove operations.
+
+The local date key uses the browser's local calendar fields; UTC conversion is
+not used for daily identity. Candidate derivation is pure and deterministic.
+It considers active Paths, active Goals with active Roadmaps, and available
+non-archived Steps whose prerequisites are complete. Explicit Roadmap
+`activeStepId` selections sort before the next required available Step,
+followed by stable Path, Goal, order, and ID comparisons. Candidates are
+suggestions only: one is reviewed and accepted, while multiple candidates use
+a compact chooser. An accepted Directive is never silently replaced.
+
+Editing a Directive stores a daily snapshot and never edits its source Step.
+Completing all objectives enables Directive completion. A linked Roadmap Step
+remains incomplete until the user explicitly chooses **Complete Roadmap Step**;
+that action calls the existing Roadmap application operation, allowing factual
+progress and the existing Graph projection to update normally. Manual
+Directives are available without a Roadmap association. Completed and
+abandoned records remain persisted for future History work, and unavailable
+source records show a restrained notice rather than deleting history.
+
+Today retains the approved compact layout, with the Directive as the visual
+anchor, visible Path → Goal → Roadmap context, restrained Map/Roadmap
+navigation, and the real Directive title passed into the prototype Lock-In
+entry where available.
 
 ## 21. Unresolved product decisions
 
@@ -176,7 +215,7 @@ LocalStorage remains synchronous and device-local. There is no cross-tab compare
 
 Beta 3 can consume these actual records using Goal `id` → Roadmap `goalId`, Roadmap `id` → Phase/Step `roadmapId`, Phase `id` → Step `phaseId`, and Step prerequisite IDs. IDs stay stable through renames, reorders, completion, and archives. Graph node identity can use namespaced keys such as `roadmap-step:<id>` and read display labels from titles; archived history remains queryable. Beta 2 exposes none of these new records as Map nodes and does not rebuild the graph.
 
-A future application service can call `getCurrentStep(goalId)` and receive either the explicitly selected Step or a separately marked suggestion. This does not generate, replace, or connect a Daily Directive. Daily Directive integration remains unimplemented.
+A future application service can call `getCurrentStep(goalId)` and receive either the explicitly selected Step or a separately marked suggestion. Beta 4 connects that bounded query to a user-confirmed Daily Directive without adding prioritization intelligence.
 
 ## 29. Interface safety and verification boundary
 

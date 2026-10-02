@@ -204,6 +204,29 @@
 .branch-system-2 .branch-chip__marker { background: var(--violet-bright); }
 .branch-system-3 .branch-chip__marker { background: #aa8cff; }
 .system-inline-notice { margin: 0 0 12px; padding: 10px 12px; border-left: 2px solid var(--amber); color: var(--copy); background: rgb(214 167 108 / .08); font-size: 11px; line-height: 1.45; }
+.directive-panel--empty { min-height: 260px; }
+.directive-empty-copy { max-width: 520px; margin-top: 12px; color: var(--copy); line-height: 1.5; }
+.directive-candidates { display: grid; gap: 6px; margin-top: 20px; }
+.directive-candidate { display: grid; gap: 4px; min-height: 64px; padding: 11px 13px; border: 1px solid var(--line); background: rgb(10 14 25 / .56); color: var(--copy); text-align: left; }
+.directive-candidate:hover, .directive-candidate:focus-visible { border-color: var(--violet-bright); background: rgb(108 91 239 / .1); }
+.directive-candidate span { color: var(--violet-bright); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
+.directive-candidate strong { color: var(--ink); font-size: 14px; font-weight: 500; }
+.directive-candidate small { color: var(--muted); font-size: 10px; }
+.directive-why { display: grid; gap: 4px; margin-top: 16px; color: var(--copy); font-size: 12px; line-height: 1.45; }
+.directive-why strong { color: var(--muted); font-size: 9px; letter-spacing: .13em; }
+.directive-add-objective { display: flex; gap: 7px; margin-top: 10px; }
+.directive-add-objective input { min-height: 40px; flex: 1; padding: 8px 10px; border: 1px solid var(--line); background: #0a0f1c; color: var(--ink); font: inherit; }
+.directive-add-objective input:focus-visible { outline: 2px solid var(--violet-bright); outline-offset: 2px; }
+.objective { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.objective > label { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.objective-remove { min-height: 36px; padding: 0 4px; opacity: .7; }
+.objective-actions { display: flex; align-items: center; gap: 3px; }
+.objective-actions .text-link { min-height: 36px; padding: 0 4px; font-size: 10px; }
+.directive-complete-label { color: var(--teal); font-size: 11px; letter-spacing: .1em; }
+.directive-context-note { margin-top: 10px; color: var(--muted); font-size: 11px; }
+.directive-edit-button { display: block; margin: 8px 0 0 auto; }
+.lockin-real-context { position: fixed; z-index: 2; top: 28px; left: clamp(22px, 5vw, 80px); display: grid; gap: 5px; color: var(--ink); font-size: 12px; }
+.lockin-real-context span { color: var(--violet-bright); font-size: 9px; letter-spacing: .14em; }
 .goal-management { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
 .goal-management__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .goal-management__heading h2 { margin-top: 7px; color: var(--ink); font-size: 19px; font-weight: 500; }
