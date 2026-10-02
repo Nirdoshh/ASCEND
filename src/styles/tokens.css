@@ -198,6 +198,41 @@
   --system-violet: #9a8cff;
   --system-violet-bright: #c4bdff;
   --system-coral: #ffb49e;
+
+  /* System shell presentation tokens. These remain isolated from the
+   * production theme and are consumed only by /system. */
+  --system-bg: #070911;
+  --system-panel: #0d1220;
+  --system-rail: #080d17;
+  --system-line: rgb(138 151 190 / 0.18);
+  --system-line-strong: rgb(155 143 255 / 0.55);
+  --system-copy-strong: #eef0ff;
+  --system-copy-soft: #a6aec9;
+  --system-copy-muted: #68728d;
+  --system-accent-violet: #8e7dff;
+  --system-accent-bright: #b8b0ff;
+  --system-accent-teal: #64c2ae;
+  --system-accent-amber: #d6a76c;
+  --system-accent-blue: #83b5dd;
+  /* Local aliases used by the isolated System stylesheet. */
+  --bg: var(--system-bg);
+  --panel: var(--system-panel);
+  --rail: var(--system-rail);
+  --line: var(--system-line);
+  --line-strong: var(--system-line-strong);
+  --ink: var(--system-copy-strong);
+  --copy: var(--system-copy-soft);
+  --muted: var(--system-copy-muted);
+  --violet: var(--system-accent-violet);
+  --violet-bright: var(--system-accent-bright);
+  --teal: var(--system-accent-teal);
+  --amber: var(--system-accent-amber);
+  --blue: var(--system-accent-blue);
+}
+
+/* Branch presentation is scoped to the isolated System experience. */
+.system-app, .system-lockin {
+  --branch-color: var(--system-accent-amber);
 }
 
 /* -----------------------------------------------------------------

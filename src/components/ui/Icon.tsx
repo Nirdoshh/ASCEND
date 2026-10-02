@@ -30,6 +30,7 @@ export type IconName =
   | 'retry'
   | 'alert'
   | 'save'
+  | 'search'
 
 export interface IconProps {
   name: IconName
@@ -161,6 +162,13 @@ const PATHS = {
     <>
       <path d="M5 4h11l3 3v13H5z" />
       <path d="M8 4v6h8V4M8 20v-6h8v6" />
+    </>
+  ),
+
+  search: (
+    <>
+      <circle cx="10.75" cy="10.75" r="6.25" />
+      <path d="m15.5 15.5 4.25 4.25" />
     </>
   ),
 } satisfies Record<IconName, React.ReactElement>
