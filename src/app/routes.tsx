@@ -14,6 +14,7 @@ import { JourneyScreen } from '../features/journey/JourneyScreen'
 import { ProgressScreen } from '../features/progress/ProgressScreen'
 import { YouScreen } from '../features/you/YouScreen'
 import { NotFoundScreen } from '../features/notfound/NotFoundScreen'
+import { SystemScreen } from '../features/system/SystemScreen'
 import {
   rootLoader,
   todayLoader,
@@ -65,6 +66,16 @@ export const router = createBrowserRouter([
     path: '/today',
     loader: todayLoader,
     element: <TodayRedirect />,
+  },
+
+  /*
+   * ASCEND SYSTEM is an isolated prototype surface. It intentionally sits
+   * outside the guarded production shell: sample fixtures only, no Journey
+   * requirement, and no access to the existing persistence contracts.
+   */
+  {
+    path: '/system',
+    element: <SystemScreen />,
   },
 
   /*

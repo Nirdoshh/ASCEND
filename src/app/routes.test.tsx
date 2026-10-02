@@ -137,4 +137,11 @@ describe('routes', () => {
 
     expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
   })
+
+  it('keeps the System prototype isolated from Journey startup routing', async () => {
+    await renderAt('/system')
+
+    expect(await screen.findByRole('heading', { name: /Become visible to yourself/ })).toBeInTheDocument()
+    expect(screen.getByText('Sample environment / no data will be saved')).toBeInTheDocument()
+  })
 })

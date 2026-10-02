@@ -550,3 +550,40 @@ Do not add functionality merely because it appears useful.
 
 Stay within the explicitly approved task or phase.
 
+
+\## ASCEND SYSTEM RESET
+
+The ASCEND SYSTEM reset is the approved product direction for the isolated
+`/system` prototype. Where this section explicitly conflicts with older UI or
+product wording above, this section supersedes it for the System prototype
+only. Historical engineering safety rules remain in force.
+
+ASCEND is being explored as a personal operating system that turns identity
+into Paths, Goals, Milestones, a Daily Directive, Actions, real-world
+completion, and visible Path evolution. The prototype may use meaningful
+Level, Rank, and System Stability language, but must not finalize numerical
+XP, stat, or Rank formulas. Sample progression values must be clearly marked
+as sample data.
+
+The first System prototype may include Today, Path, Status, You, an ASCEND
+Graph, completion consequence motion, and Lock-In UX. It must remain isolated
+from the production navigation and current saved data. It must not add
+authentication, AI, backend infrastructure, persistence migrations, domain
+schema changes, or native app blocking. Do not begin later System phases
+without an explicit request.
+
+The System visual language can be cinematic, futuristic, mysterious, and
+focused, using an original dark midnight and indigo/violet identity with
+restrained luminosity. It must not copy copyrighted artwork, panels, logos,
+terminology, sounds, screenshots, or character assets from any work. Keep
+semantic hierarchy, keyboard access, WCAG 2.2 AA targets, reduced-motion
+support, responsive reflow, useful interface states, and bounded slices.
+
+Level is permanent accumulated progression and normal daily failure must not
+reduce it. Rank represents current standing and its rules remain unresolved.
+System Stability is temporary and may eventually reflect commitments,
+completion, abandonment, and recovery. Conditions such as STABLE, UNSTABLE,
+DEGRADED, and DORMANT are exploratory labels only until product decisions
+are finalized. Emergency or legitimate Lock-In exits must remain available;
+no punishment is implemented in this prototype.
+

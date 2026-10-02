@@ -182,6 +182,22 @@
   /* Runtime-measured when enlarged text makes the mobile bar taller. */
   --mobile-nav-height: var(--nav-height);
   --content-pad-x: var(--space-4);
+
+  /* ASCEND SYSTEM prototype tokens. Scoped consumers still own the visual
+   * treatment; declaring these here keeps the repository's token-reference
+   * contract explicit while the prototype remains isolated from production
+   * components. */
+  --system-ink: #f1efff;
+  --system-copy: #b4b0ce;
+  --system-muted: #77738e;
+  --system-line: rgb(169 158 255 / 0.2);
+  --system-line-strong: rgb(169 158 255 / 0.48);
+  --system-surface: rgb(22 20 43 / 0.74);
+  --system-surface-strong: #1b1837;
+  --system-deep: #070714;
+  --system-violet: #9a8cff;
+  --system-violet-bright: #c4bdff;
+  --system-coral: #ffb49e;
 }
 
 /* -----------------------------------------------------------------
