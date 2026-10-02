@@ -184,4 +184,20 @@ The vertical route keeps the current Step dominant, completion visible, locked c
 
 An open Roadmap form must be saved or canceled before switching Goal, Path, or Map mode. System section navigation preserves the form in memory, including entering and exiting Lock-In. A browser unload guard protects an open form from silent navigation loss; drafts are not separately persisted. This is a bounded safety behavior, not a Notes or draft persistence system.
 
-The remaining sample fixtures are the Beta 1 directive, objectives, timer, Level, Rank, Stability, condition, evidence counts, identity statement, configuration counts, and graph completion pulse. No Roadmap, Phase, or Step is sample-seeded. Numerical formulas and every deferred feature in section 18 remain unresolved or unimplemented. Stop after Beta 2; no deployment or automatic Beta 3 work.
+The remaining sample fixtures are the Beta 1 directive, objectives, timer, Level, Rank, Stability, condition, evidence counts, identity statement, and configuration counts. No Roadmap, Phase, or Step is sample-seeded. Numerical formulas and every deferred feature in section 18 remain unresolved or unimplemented.
+
+## 30. Beta 3 Graph projection and navigation
+
+Beta 3's ASCEND Graph is a read-only projection of the persisted System collection. It does not create a graph database or duplicate authored records. The projection maps `YOU` to Path records, Paths to Goals, Goals to Roadmaps, Roadmaps to Phases, and Phases to Steps. SKILL prerequisite IDs may produce a separate prerequisite edge in Goal and Phase focus. Note, backlink, and free-form relationship records remain out of scope.
+
+Global View prioritizes YOU, visible Paths, and active Goals. Focus View progressively reveals the selected Path's Goals, then a selected Goal's Roadmap Phases and current or nearby Steps. Phase focus reveals that Phase's Steps. Semantic zoom changes which records are rendered; it does not merely shrink labels. ACTIVE filtering hides archived records and keeps current work prominent. ALL includes retained historical records where useful.
+
+Node keys are namespaced from stable source IDs (`path:<id>`, `goal:<id>`, `phase:<id>`, and `step:<id>`). Titles and positions are presentation values and never identity. Structural edges use solid connections; prerequisite edges use a visually distinct dashed treatment. The projection derives status, completion, optional, locked, and current state from existing records.
+
+Layout is deterministic and semantic. YOU is the stable anchor. Suggested Path names receive preferred geographic sectors (MIND upper, BODY left, FOCUS right, SELF lower); custom Paths receive stable sectors ordered by their opaque IDs. Goals grow from their Path, and focused Goal layouts use ordered Phase and Step layers. Reopening the same data produces the same positions, including after a title edit. Camera pan, bounded zoom, reset, and fit are transient UI state and are never persisted.
+
+Map and Roadmap remain separate views of the same Goal. A Goal inspector's **OPEN ROADMAP** enters the existing Roadmap mode for that Goal. Roadmap's **VIEW IN MAP** returns to Map and focuses the corresponding Goal. Search uses normalized substring matching over Paths, Goals, Phases, and Steps; selecting a result reveals and selects its branch. The compact inspector exposes only data already present in the Path, Goal, Phase, Roadmap, or Step records.
+
+Graph nodes are keyboard controls with visible focus and meaningful accessible names, and the inspector provides a semantic text representation of the selected record. The graph stage supports pointer drag on desktop and touch, with explicit zoom controls on every viewport. Reduced-motion users receive immediate state changes without traveling pulses. Completing a persisted Step may briefly pulse its visible structural branch; the animation is transient and is not replayed after refresh.
+
+Empty, unavailable, malformed, and future-schema states use explicit recovery or creation messaging and never insert fake graph nodes. The graph projection and layout remain pure, testable functions; React owns only transient focus, search, camera, and inspector state. Beta 3 requires no schema migration and no runtime graph dependency.

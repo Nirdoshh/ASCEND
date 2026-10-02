@@ -26,6 +26,7 @@ type Props = {
   onData: (data: SystemData) => void
   onEditState: (editing: boolean) => void
   storageProblem: string | null
+  onViewMap?: (goalId: string) => void
 }
 const emptyEditor = { title: '', description: '', type: 'GOAL' as const, optional: false, prerequisites: [] }
 function move(ids: string[], index: number, direction: number): string[] {
@@ -38,7 +39,7 @@ function Reorder({ title, index, count, onMove }: { title: string; index: number
   return <div className="roadmap-reorder"><button type="button" className="text-link" disabled={index === 0} aria-label={`Move ${title} up`} onClick={() => onMove(-1)}>Up</button><button type="button" className="text-link" disabled={index === count - 1} aria-label={`Move ${title} down`} onClick={() => onMove(1)}>Down</button></div>
 }
 
-export function SystemRoadmapView({ data, pathId, selectedGoalId, onGoalSelect, service, onData, onEditState, storageProblem }: Props) {
+export function SystemRoadmapView({ data, pathId, selectedGoalId, onGoalSelect, service, onData, onEditState, storageProblem, onViewMap }: Props) {
   const goals = data.goals.filter(g => g.pathId === pathId)
   const [goalId, setGoalId] = useState<string | null>(null)
   const goal = goals.find(g => g.id === (selectedGoalId ?? goalId)) ?? goals.find(g => g.status === 'ACTIVE') ?? goals[0]
@@ -106,6 +107,7 @@ export function SystemRoadmapView({ data, pathId, selectedGoalId, onGoalSelect, 
     {goal && !roadmap && !editor && <div className="system-empty-state"><p>No Roadmap yet.</p><small>Create the route to this Goal.</small><button type="button" className="system-button system-button--primary" disabled={Boolean(storageProblem) || goal.status === 'ARCHIVED'} onClick={() => begin('create', goal)}>Create Roadmap</button>{goal.status === 'ARCHIVED' && <p>This Goal is archived. Its history is preserved.</p>}</div>}
     {roadmap && <>
       <div className="roadmap-toolbar">
+        {onViewMap && <button type="button" className="text-link" disabled={Boolean(editor)} onClick={() => onViewMap(goal!.id)}>View in Map</button>}
         <button type="button" className="text-link" disabled={!editable} onClick={() => edit({ ...emptyEditor, kind: 'edit', goalId: goal!.id, roadmapId: roadmap.id, title: roadmap.title, description: roadmap.description ?? '', type: roadmap.type })}>Edit Roadmap</button>
         {roadmap.status === 'PAUSED' || roadmap.status === 'ARCHIVED' ? <button type="button" className="text-link" disabled={Boolean(editor) || Boolean(storageProblem)} onClick={() => apply(service.resume(roadmap.id, new Date().toISOString()), 'Roadmap resumed.')}>{roadmap.status === 'ARCHIVED' ? 'Restore Roadmap' : 'Resume Roadmap'}</button> : roadmap.status === 'ACTIVE' && <button type="button" className="text-link" disabled={!editable} onClick={() => apply(service.pause(roadmap.id, new Date().toISOString()), 'Roadmap paused.')}>Pause Roadmap</button>}
         {roadmap.status !== 'ARCHIVED' && <button type="button" className="text-link" disabled={!editable} onClick={() => apply(service.archive(roadmap.id, new Date().toISOString()), 'Roadmap archived. All content and history are retained.')}>Archive Roadmap</button>}
