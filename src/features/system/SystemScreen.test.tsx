@@ -33,7 +33,7 @@ describe('System navigation', () => {
     const destinations = [
       ['Path', 'A bigger you.'],
       ['Status', 'SYSTEM STATUS'],
-      ['You', 'Build something real.'],
+      ['You', 'Your direction stays yours.'],
       ['Today', 'Today'],
     ] as const
     const nav = screen.getAllByRole('navigation', { name: 'System sections' })[index]!

@@ -48,6 +48,7 @@ export function localDateKey(date: Date = new Date()): string {
 
 export function isDateKey(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && localDateKey(new Date(`${value}T12:00:00`)) === value
 }
 
 export function createDirectiveId(): string {
@@ -135,6 +136,7 @@ export function deriveDirectiveCandidates(data: SystemData): DirectiveCandidate[
 export function normalizeDirective(raw: unknown): SystemDailyDirective | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   const value = raw as Record<string, unknown>
+  if (!validRecordTextAndCompletion(value)) return null
   if (value.schemaVersion !== 1 || typeof value.id !== 'string' || !value.id || !isDateKey(value.dateKey) || typeof value.title !== 'string' || !value.title.trim() || !['ROADMAP_STEP', 'MANUAL'].includes(String(value.sourceType)) || !['ACTIVE', 'COMPLETED', 'ABANDONED'].includes(String(value.status)) || typeof value.createdAt !== 'string' || Number.isNaN(Date.parse(value.createdAt as string)) || typeof value.updatedAt !== 'string' || Number.isNaN(Date.parse(value.updatedAt as string)) || !(value.completedAt === null || typeof value.completedAt === 'string')) return null
   if (value.sourceType === 'ROADMAP_STEP' && typeof value.sourceRoadmapStepId !== 'string') return null
   return { schemaVersion: 1, id: value.id, dateKey: value.dateKey, title: value.title.trim(), ...(typeof value.description === 'string' && value.description.trim() ? { description: value.description.trim() } : {}), ...(typeof value.why === 'string' && value.why.trim() ? { why: value.why.trim() } : {}), sourceType: value.sourceType as DailyDirectiveSourceType, ...(typeof value.sourceRoadmapStepId === 'string' ? { sourceRoadmapStepId: value.sourceRoadmapStepId } : {}), status: value.status as DailyDirectiveStatus, createdAt: value.createdAt, updatedAt: value.updatedAt, completedAt: value.completedAt as string | null }
@@ -143,6 +145,14 @@ export function normalizeDirective(raw: unknown): SystemDailyDirective | null {
 export function normalizeDirectiveObjective(raw: unknown): SystemDirectiveObjective | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
   const value = raw as Record<string, unknown>
+  if (!validRecordTextAndCompletion(value)) return null
   if (value.schemaVersion !== 1 || typeof value.id !== 'string' || !value.id || typeof value.directiveId !== 'string' || !value.directiveId || typeof value.title !== 'string' || !value.title.trim() || !Number.isSafeInteger(value.order) || Number(value.order) < 0 || !(value.completedAt === null || typeof value.completedAt === 'string') || typeof value.createdAt !== 'string' || Number.isNaN(Date.parse(value.createdAt as string)) || typeof value.updatedAt !== 'string' || Number.isNaN(Date.parse(value.updatedAt as string))) return null
   return { schemaVersion: 1, id: value.id, directiveId: value.directiveId, title: value.title.trim(), order: value.order as number, completedAt: value.completedAt as string | null, createdAt: value.createdAt, updatedAt: value.updatedAt }
+}
+
+function validRecordTextAndCompletion(value: Record<string, unknown>): boolean {
+  return typeof value.id === 'string' && value.id.trim() !== '' && value.id === value.id.trim()
+    && typeof value.title === 'string' && value.title.trim().length > 0 && value.title.trim().length <= 500
+    && ['description', 'why'].every(key => value[key] === undefined || typeof value[key] === 'string' && value[key].trim().length <= 500)
+    && (value.completedAt === null || typeof value.completedAt === 'string' && Number.isFinite(Date.parse(value.completedAt)))
 }

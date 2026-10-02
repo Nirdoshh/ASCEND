@@ -1,7 +1,7 @@
 # ASCEND SYSTEM — Product Bible
 
-**Status:** ASCEND System Beta 4 — Roadmap → Today → Completion, October 2026
-**Scope:** Isolated `/system` experience with local-first Paths, Goals, and manual Roadmaps. The approved System UI remains the visual reference (`docs/reference/approved-system-ui.png`). This document records the bounded prototype contract; it does not define a production backend schema.
+**Status:** ASCEND Beta V1 Release Candidate — October 2026 (not deployed)
+**Scope:** The primary application at `/`, with `/system` retained as a compatibility alias. Local-first Paths, Goals, Roadmaps, Graph, Daily Directives, and objective completion are real. The approved System UI remains the visual reference (`docs/reference/approved-system-ui.png`). This document records the current local-first release contract; it does not define a backend schema. The historical isolation requirement is superseded only for the explicitly approved Beta V1 entry transition.
 
 ## 1. Product vision
 
@@ -19,13 +19,13 @@ YOU is conceptually central. Identity gives direction. Paths are meaningful grow
 
 ## 3. Daily Directive
 
-Today has one dominant object: the **Daily Directive**. It is a meaningful primary mission, connected to a Path, Goal, and Milestone. A user may accept the System's suggestion or change it. The alpha uses the sample directive “Finish the payment workflow” with three sample objectives and a prominent ENTER LOCK-IN action.
+Today has one dominant object: the **Daily Directive**. It is a meaningful primary mission, connected to a Path, Goal, and Milestone. Candidates are derived from real Roadmap Steps and require acceptance. Users may also create, edit, or explicitly replace a manual Directive. Today contains no seeded mission or objectives. ENTER LOCK-IN passes the actual accepted Directive and saved objectives into focus mode.
 
 Secondary actions can support momentum, but they must remain visually and semantically secondary to the Directive.
 
 ## 4. Actions
 
-An Action is an observable real-world step. Completion is a meaningful signal, not a currency reward. Alpha objectives are local in-memory fixtures and do not write to existing repositories.
+An Action is an observable real-world step. Completion is a meaningful signal, not a currency reward. Directive objectives are real ordered records saved in the System repository. Completion, editing, and reordering update those records. Removing an objective asks for confirmation; completed Directives are read-only in the UI. Directive completion never automatically completes its linked Roadmap Step.
 
 ## 5. Path model
 
@@ -33,7 +33,7 @@ A Path is a user-owned direction of growth that connects identity to action. Bet
 
 Each Path has `schemaVersion`, an opaque stable `id`, `name`, optional `description`, `source` (`SUGGESTED` or `CUSTOM`), `status` (`ACTIVE`, `PAUSED`, or `ARCHIVED`), `createdAt`, and `updatedAt`. Names are presentation text; references use the id. Archiving keeps the record and its history.
 
-The stable storage key remains `ascend:system:v1`. Beta 2 upgrades the collection envelope to schema version 2; Path and Goal record contracts remain version 1. Keeping the same key makes guarded Beta 1 builds see version 2 and refuse writes rather than create a second, diverging System. Existing Journey, DailyPlan, Today's Win, and Daily Step records remain under their existing keys. Migration and Roadmap records are described below.
+The stable storage key remains `ascend:system:v1`. Beta 2 upgraded the envelope to version 2 and Beta 4 upgraded it to version 3; Path and Goal record contracts remain version 1. Keeping the same key makes guarded Beta 1 builds see the newer envelope and refuse writes rather than create a second, diverging System. Existing Journey, DailyPlan, Today's Win, and Daily Step records remain under their existing keys. Migration and Roadmap records are described below.
 
 ## 6. Goal model
 
@@ -43,9 +43,9 @@ The Path screen keeps the graph primary. Selecting a Path reveals its Goals and 
 
 ## 7. Graph model
 
-The ASCEND Graph is a semantic, stable-layout SVG: YOU at the conceptual center, Paths above it, then Goals, Milestones, and the current Action. It uses curved fine connections, subtle perspective, depth through scale and luminosity, and focusable branches. It is intentionally not a random physics graph or an Obsidian clone. Node placement is stable so meaning does not move while a user explores.
+The ASCEND Graph is a semantic, stable-layout SVG projection of YOU, Paths, Goals, Roadmap Phases, and Steps. Global, Path, Goal, and Phase focus progressively reveal real persisted records. It uses curved fine connections, subtle perspective, depth through scale and luminosity, and focusable branches. It is intentionally not a random physics graph or an Obsidian clone. Node placement is stable so meaning does not move while a user explores.
 
-Clicking a Path focuses that branch. Clicking a Goal or Milestone focuses the corresponding branch and exposes its connected depth. The current Action is visually connected to its Path.
+Clicking a Path focuses that branch. Clicking a Goal or Phase reveals the corresponding route detail. Steps expose their recorded completion and prerequisite state in the inspector. Search, ACTIVE/ALL, pan, zoom, fit/reset, and Map ↔ Roadmap navigation operate on the same records.
 
 ## 8. Level
 
@@ -53,11 +53,11 @@ Level is intended to represent permanent accumulated progression. Normal daily f
 
 ## 9. Rank
 
-Rank is intended to represent current progression tier or standing. Its relationship to Level, evidence, time, and recovery is not finalized. The alpha shows sample Rank C only.
+Rank is intended to represent current progression tier or standing. Its relationship to Level, evidence, time, and recovery is not finalized. Beta V1 shows no Rank value.
 
 ## 10. System Stability
 
-Stability is a temporary system condition. It may eventually reflect accepted commitments, completed Lock-In sessions, abandonment, and recovery. Alpha shows sample Stability 82% and does not calculate or persist it.
+Stability is a temporary system condition. It may eventually reflect accepted commitments, completed Lock-In sessions, abandonment, and recovery. Beta V1 shows no Stability percentage or Condition label.
 
 ## 11. Conditions
 
@@ -65,17 +65,19 @@ The exploratory condition vocabulary is **STABLE**, **UNSTABLE**, **DEGRADED**, 
 
 ## 12. Penalties and recovery direction
 
-The direction is to keep setbacks temporary and recoverable. A normal missed day must not damage permanent Level. Voluntary abandonment may eventually affect Stability or a temporary condition; emergency and legitimate interruptions should not receive punishment. No formulas or penalties are implemented in Alpha.
+The direction is to keep setbacks temporary and recoverable. A normal missed day must not damage permanent Level. Voluntary abandonment may eventually affect Stability or a temporary condition; emergency and legitimate interruptions should not receive punishment. No formulas or penalties are implemented in Beta V1.
 
 ## 13. Lock-In
 
-Lock-In is a focused-session UX prototype, not OS-level blocking. The alpha hides normal navigation, keeps the mission, timer, objectives, sealed distractions, and an always-available emergency exit. Exiting asks for a reason. Real blocking would require native or mobile integration later.
+Lock-In is a web focus environment. It hides normal navigation and shows the real Directive, its Path/Goal/Roadmap context where available, and usable saved objectives. The frozen sample countdown is removed: the ring explicitly reads NOW / UNTIMED SESSION. There is no countdown, persisted session, duration tracking, resume-after-refresh, or background timer guarantee. Refresh leaves focus mode but preserves Directive and objective data.
+
+DISTRACTIONS TO AVOID is a fixed, clearly labeled set of suggested reminders. No apps or websites are blocked, no avoidance commitment is inferred, and the list is not saved or configurable. EXIT opens a keyboard-accessible native dialog; Escape closes the dialog and End session leaves focus. A reason can be selected but is not recorded. Emergency and legitimate exits remain available with no penalties. EXIT does not claim a hold gesture. Real blocking would require native integration in a later approved phase.
 
 The future “Deep Lock” direction may require a minimum focus time and primary mission completion. These are product hypotheses, not finalized rules.
 
 ## 14. Status
 
-Status is a readout of what is happening to the user's System. Alpha includes clearly labeled sample values: Level 18, Rank C, Stability 82%, Condition Stable. Below that, Real Evidence modules show action history for BUILD, BODY, and VOICE. Alpha does not claim hidden measurements such as strength or intelligence scores.
+Status uses the approved four-card layout for factual active Path, active Goal, completed Roadmap Step, and completed Daily Directive counts. It also reports completed Goals, completed objectives, and per-Path active Goals and Step completions. Active counts use each record's saved ACTIVE status; completion counts use recorded timestamps or COMPLETED Directive status, including retained history where available. Counts do not measure personal mastery. No Level, Rank, Stability, Condition, fake evidence bars, or invented activity-day counts remain. Unreadable storage reports unavailability rather than fabricated zero values.
 
 ## 15. Visual language
 
@@ -85,15 +87,15 @@ The System uses a near-black midnight environment, graphite and translucent surf
 
 Motion is purposeful and short: 120–300ms for interface changes and 300–600ms for meaningful arrival or consequence moments. Alpha includes a brief awakening, panel arrival, branch focus, and a restrained pulse traveling through the active graph connection after completion. It avoids confetti, loot, coins, constant particles, bounce, and interaction-blocking transitions. Reduced-motion users receive the same state changes without spatial or looping motion.
 
-## 17. Sample-only data
+## 17. Real records and remaining examples
 
-The Beta 1 Path and Goal records are real local user data. The values listed below remain sample-only prototype readouts.
+Paths, Goals, Roadmaps, Phases, Steps, Directives, and objectives are real local records. Suggested BODY, MIND, FOCUS, and SELF Paths are intentionally offered as editable user records; no Goals or Roadmaps are seeded. The Graph is derived from these records rather than a fixture graph.
 
-The directive, objectives, timer, Level 18, Rank C, Stability 82%, conditions, evidence counts, identity statement, and “21 days awake” are sample fixtures. They are not user records, analytics, measurements, or progression formulas.
+The only remaining user-facing sample surface is Lock-In's explicitly suggested distraction reminders. There are no sample missions, actions, fake completion counts, personal initials, age, identity statement, or progression scores. You shows an honest identity empty state, the real active Path count, and device-local storage / no-cloud-account configuration. It does not imply a user-selected focus duration or offer a profile editor.
 
 ## 18. Not implemented
 
-The System does not implement AI priority or Roadmap generation, automatic personalized scheduling, Roadmap templates, Node Notes, `[[links]]`, backlinks, a Markdown editor, backend, authentication, native app blocking, real timers or Lock-In sessions, XP, Level formulas, Rank formulas, Stability formulas, penalties, a full Daily History UI, Notes, or production navigation. Standalone Milestone records remain unimplemented; a Roadmap Step can describe a milestone.
+The System does not implement AI priority or Roadmap generation, automatic personalized scheduling, Roadmap templates, Node Notes, `[[links]]`, backlinks, a Markdown editor, backend, authentication, native app blocking, persistent Lock-In sessions or countdown timers, cloud accounts or sync, XP, Level formulas, Rank formulas, Stability formulas, penalties, a full Daily History UI, Notes, or backlinks. Standalone Milestone records remain unimplemented; a Roadmap Step can describe a milestone.
 
 ## 19. Copyright and originality boundary
 
@@ -160,7 +162,7 @@ The execution hierarchy is **YOU → PATH → GOAL → ROADMAP → PHASE → STE
 
 Beta 2 permits one Roadmap per Goal, including paused, completed, or archived routes. Restore and edit the existing route rather than create multiple competing routes. Multiple route alternatives remain a later product decision.
 
-**Map** answers “How does everything in my growth connect?” and remains the existing semantic graph / constellation. **Roadmap** answers “What should I do, and in what order, to reach this specific Goal?” and uses a compact vertical progression path. The Path view has a restrained MAP / ROADMAP switch. Roadmap mode selects one Path and one Goal at a time; it never dumps all routes into a graph or board. The Map graph engine, layout, and nodes are unchanged.
+**Map** answers “How does everything in my growth connect?” and remains the existing semantic graph / constellation. **Roadmap** answers “What should I do, and in what order, to reach this specific Goal?” and uses a compact vertical progression path. The Path view has a restrained MAP / ROADMAP switch. Roadmap mode selects one Path and one Goal at a time; it never dumps all routes into a graph or board. Beta 2 originally preserved Map; Beta 3 subsequently connected the real Roadmap records as described in section 30.
 
 ## 23. Roadmap types and records
 
@@ -213,7 +215,7 @@ LocalStorage remains synchronous and device-local. There is no cross-tab compare
 
 ## 28. Future Graph and Today integration boundaries
 
-Beta 3 can consume these actual records using Goal `id` → Roadmap `goalId`, Roadmap `id` → Phase/Step `roadmapId`, Phase `id` → Step `phaseId`, and Step prerequisite IDs. IDs stay stable through renames, reorders, completion, and archives. Graph node identity can use namespaced keys such as `roadmap-step:<id>` and read display labels from titles; archived history remains queryable. Beta 2 exposes none of these new records as Map nodes and does not rebuild the graph.
+Beta 3 can consume these actual records using Goal `id` → Roadmap `goalId`, Roadmap `id` → Phase/Step `roadmapId`, Phase `id` → Step `phaseId`, and Step prerequisite IDs. IDs stay stable through renames, reorders, completion, and archives. Graph node identity can use namespaced keys such as `roadmap-step:<id>` and read display labels from titles; archived history remains queryable. Beta 2 originally exposed none of these records as Map nodes; Beta 3 now uses the shared projection in section 30.
 
 A future application service can call `getCurrentStep(goalId)` and receive either the explicitly selected Step or a separately marked suggestion. Beta 4 connects that bounded query to a user-confirmed Daily Directive without adding prioritization intelligence.
 
@@ -223,7 +225,7 @@ The vertical route keeps the current Step dominant, completion visible, locked c
 
 An open Roadmap form must be saved or canceled before switching Goal, Path, or Map mode. System section navigation preserves the form in memory, including entering and exiting Lock-In. A browser unload guard protects an open form from silent navigation loss; drafts are not separately persisted. This is a bounded safety behavior, not a Notes or draft persistence system.
 
-The remaining sample fixtures are the Beta 1 directive, objectives, timer, Level, Rank, Stability, condition, evidence counts, identity statement, and configuration counts. No Roadmap, Phase, or Step is sample-seeded. Numerical formulas and every deferred feature in section 18 remain unresolved or unimplemented.
+Beta V1 removes the historical Alpha/Beta progression, identity, mission, objective, and timer fixtures. No Roadmap, Phase, or Step is sample-seeded. Numerical formulas and every deferred feature in section 18 remain unresolved or unimplemented.
 
 ## 30. Beta 3 Graph projection and navigation
 
@@ -240,3 +242,15 @@ Map and Roadmap remain separate views of the same Goal. A Goal inspector's **OPE
 Graph nodes are keyboard controls with visible focus and meaningful accessible names, and the inspector provides a semantic text representation of the selected record. The graph stage supports pointer drag on desktop and touch, with explicit zoom controls on every viewport. Reduced-motion users receive immediate state changes without traveling pulses. Completing a persisted Step may briefly pulse its visible structural branch; the animation is transient and is not replayed after refresh.
 
 Empty, unavailable, malformed, and future-schema states use explicit recovery or creation messaging and never insert fake graph nodes. The graph projection and layout remain pure, testable functions; React owns only transient focus, search, camera, and inspector state. Beta 3 requires no schema migration and no runtime graph dependency.
+
+## 31. Beta V1 release boundary
+
+The real core loop is **PATH → GOAL → ROADMAP → GRAPH → DAILY DIRECTIVE → ACTION → COMPLETION → ROADMAP UPDATE → GRAPH UPDATE**. Only the user explicitly completes a linked Step. Both entry routes render the same System screen directly; no redirect, cloned screen, Journey migration, legacy deletion, new schema version, or runtime dependency is introduced. Legacy /today, /journey, /progress, /you, and onboarding routes and their data remain in the repository.
+
+Persistence remains collection version 3 at ascend:system:v1. Version 1 and 2 migration is read-only until a successful save. Conflicting older unversioned Directive fields, malformed records, and future schemas are refused without overwriting bytes. Directive/objective authored text and unknown record extensions survive read/save. Timestamp and calendar-date validation reject malformed execution data. No legacy Journey, DailyPlan, TodayWin, or DailyStep key is changed by the System flow.
+
+Release polish retains the approved visual composition. Controls expose visible focus, named graph actions, labeled forms and errors, accessible objective completion, and a named exit dialog. The responsive pass covers 1440×900, 768×1024, and 375×667, plus 200% reflow and reduced motion. Verification is a concrete regression pass, not accessibility certification.
+
+Known limits: one browser/device, no cross-tab merge protocol, no export/recovery UI, and no persistent editor drafts. Today and Path drafts survive section navigation in memory; explicit cancel or browser reload can discard them. Today, Roadmap, and Path forms install an unload warning while editing. Lock-In state, focus-list suggestions, and exit reasons are transient. The completed daily record remains visible for its local day; the next local day offers the next real candidate. AI prioritization, XP, Level/Rank/Stability formulas, penalties, cloud accounts, sync, native blocking, the full persistent Lock-In engine, Notes, Markdown, and backlinks remain unimplemented.
+
+This is a release candidate only. No deployment, automatic commit, or later feature phase is authorized by this work. See docs/ascend-beta-v1-release-verification.md for the verification evidence and its limits.

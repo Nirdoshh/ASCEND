@@ -307,6 +307,61 @@
   .system-button:active { transform: none; }
 }
 
+/* Beta V1 release polish: preserve the approved composition at narrow widths. */
+.system-app [hidden], .system-lockin [hidden] { display: none !important; }
+.system-main, .lockin-mission, .directive-panel__body > div { min-width: 0; }
+.system-app h1, .system-app h2, .system-app h3, .system-app p,
+.system-lockin h1, .system-lockin p, .objective strong { overflow-wrap: anywhere; }
+.system-app button, .system-lockin button { cursor: pointer; }
+.system-app button:disabled, .system-lockin button:disabled { cursor: default; opacity: .65; }
+.system-lockin :focus-visible, .system-app input:focus-visible, .system-app select:focus-visible,
+.system-main:focus-visible, .graph-svg:focus-visible { outline: 2px solid var(--violet-bright); outline-offset: 3px; }
+.objective:has(input:focus-visible) .objective__box { outline: 2px solid var(--violet-bright); outline-offset: 3px; }
+.system-skip-link { position: fixed; z-index: 10; top: 8px; left: 8px; padding: 12px; background: var(--panel); color: var(--ink); transform: translateY(-150%); }
+.system-skip-link:focus { transform: none; }
+.system-skip-link:not(:focus) { width: 1px; height: 1px; padding: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.system-avatar .system-mark { width: 16px; height: 16px; }
+.directive-panel__actions { flex-wrap: wrap; }
+.directive-panel__body { grid-template-columns: minmax(0, 1fr); }
+.directive-add-objective input { min-width: 0; min-height: 44px; }
+.objective > label { min-height: 44px; cursor: pointer; }
+.objective > span.objective-actions { display: flex; }
+.objective-list--compact .objective { justify-content: flex-start; }
+.objective-actions .text-link, .graph-filter button, .graph-search-results button,
+.graph-controls button, .graph-inspector__close { min-width: 44px; min-height: 44px; }
+.system-app .text-link { min-width: 44px; }
+.goal-form input, .goal-form textarea, .directive-add-objective input, .graph-search { border-color: #677395; }
+.graph-search:focus-within { outline: 2px solid var(--violet-bright); outline-offset: 3px; }
+.graph-node.is-dimmed { opacity: .8; }
+.graph-inspector__close { width: 44px; height: 44px; }
+.growth-list article { grid-template-columns: 8px minmax(0, 1fr) auto auto; }
+.growth-list article > strong { grid-column: 4; }
+.identity-empty-copy { margin-top: 18px !important; color: var(--copy); font-size: 20px; line-height: 1.5; }
+.lockin-exit-dialog select { min-height: 44px; }
+.lockin-exit-dialog { max-height: calc(100dvh - 30px); overflow-y: auto; }
+.lockin-layout { grid-template-columns: minmax(0, 390px) minmax(0, 530px); }
+@media (max-width: 900px) {
+  .system-path .screen-heading { flex-wrap: wrap; }
+  .lockin-layout { gap: 30px; }
+}
+@media (max-width: 600px) {
+  .screen-heading { flex-wrap: wrap; gap: 12px; }
+  .screen-heading__status { text-align: left; }
+  .path-tools { width: 100%; flex-wrap: wrap; }
+  .graph-search { min-width: 0; flex: 1; }
+  .graph-search input { width: 100%; min-width: 0; }
+  .objective { align-items: flex-start; flex-wrap: wrap; }
+  .objective-actions { width: 100%; justify-content: flex-end; }
+  .graph-panel__heading { flex-wrap: wrap; }
+  .graph-panel__tools { flex-direction: row; }
+  .configuration-grid { grid-template-columns: 1fr; }
+  .configuration-grid strong { font-size: 29px; }
+  .lockin-layout { grid-template-columns: minmax(0, 1fr); }
+  .lockin-header { flex-wrap: wrap; }
+  .lockin-timer { min-height: 190px; }
+  .system-app button, .system-lockin button, .system-app a { scroll-margin-bottom: 90px; }
+}
+
 @media (max-width: 600px) {
   .goal-management__heading { display: grid; gap: 12px; }
   .goal-management__actions { justify-content: flex-start; }

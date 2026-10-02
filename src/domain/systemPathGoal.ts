@@ -187,23 +187,26 @@ export function normalizeSystemData(raw: unknown): SystemData | null {
   if (!validRoadmapRecords(value, goalIds, new Set([...pathIds, ...goalIds]))) return null
   if (!Array.isArray(value.directives) || !Array.isArray(value.directiveObjectives)) return null
   const directiveIds = new Set<string>()
-  const directives: SystemDailyDirective[] = []
+  const recordIds = new Set([...pathIds, ...goalIds, ...(value.roadmaps as SystemRoadmap[]).map(record => record.id), ...(value.roadmapPhases as RoadmapPhase[]).map(record => record.id), ...(value.roadmapSteps as RoadmapStep[]).map(record => record.id)])
+  const activeDates = new Set<string>()
   for (const entry of value.directives) {
     const directive = normalizeDirective(entry)
-    if (!directive || directiveIds.has(directive.id)) return null
+    if (!directive || recordIds.has(directive.id) || directive.status === 'ACTIVE' && activeDates.has(directive.dateKey)) return null
+    recordIds.add(directive.id)
+    if (directive.status === 'ACTIVE') activeDates.add(directive.dateKey)
     directiveIds.add(directive.id)
-    directives.push(directive)
   }
-  const objectiveIds = new Set<string>()
-  const objectives: SystemDirectiveObjective[] = []
+  const objectiveOrders = new Set<string>()
   for (const entry of value.directiveObjectives) {
     const objective = normalizeDirectiveObjective(entry)
-    if (!objective || objectiveIds.has(objective.id) || !directiveIds.has(objective.directiveId)) return null
-    objectiveIds.add(objective.id)
-    objectives.push(objective)
+    if (!objective || recordIds.has(objective.id) || !directiveIds.has(objective.directiveId)) return null
+    const orderKey = `${objective.directiveId}:${objective.order}`
+    if (objectiveOrders.has(orderKey)) return null
+    objectiveOrders.add(orderKey)
+    recordIds.add(objective.id)
   }
   // Keep original authored text and unknown fields; validation must not truncate.
-  return { ...value, schemaVersion: SYSTEM_SCHEMA_VERSION, paths: value.paths as SystemPath[], goals: value.goals as SystemGoal[], roadmaps: value.roadmaps as SystemRoadmap[], roadmapPhases: value.roadmapPhases as RoadmapPhase[], roadmapSteps: value.roadmapSteps as RoadmapStep[], directives, directiveObjectives: objectives }
+  return { ...value, schemaVersion: SYSTEM_SCHEMA_VERSION, paths: value.paths as SystemPath[], goals: value.goals as SystemGoal[], roadmaps: value.roadmaps as SystemRoadmap[], roadmapPhases: value.roadmapPhases as RoadmapPhase[], roadmapSteps: value.roadmapSteps as RoadmapStep[], directives: value.directives as SystemDailyDirective[], directiveObjectives: value.directiveObjectives as SystemDirectiveObjective[] }
 }
 
 function normalizePath(raw: unknown): SystemPath | null {
@@ -261,6 +264,9 @@ export function migrateSystemData(raw: unknown): SystemData | null {
     if ('roadmaps' in value || 'roadmapPhases' in value || 'roadmapSteps' in value || 'directives' in value || 'directiveObjectives' in value) return null
     return normalizeSystemData({ ...value, schemaVersion: 3, roadmaps: [], roadmapPhases: [], roadmapSteps: [], directives: [], directiveObjectives: [] })
   }
-  if (value.schemaVersion === 2) return normalizeSystemData({ ...value, schemaVersion: 3, directives: [], directiveObjectives: [] })
+  if (value.schemaVersion === 2) {
+    if ('directives' in value || 'directiveObjectives' in value) return null
+    return normalizeSystemData({ ...value, schemaVersion: 3, directives: [], directiveObjectives: [] })
+  }
   return normalizeSystemData(value)
 }

@@ -77,7 +77,8 @@ export function layoutSystemGraph(data: SystemData, focus: GraphFocus = { type: 
       const phases = data.roadmapPhases.filter(phase => phase.roadmapId === roadmap.id && (filter === 'ALL' || !phase.archivedAt)).sort((a, b) => a.order - b.order)
       for (const [phaseIndex, phase] of phases.entries()) {
         const phaseFocused = focus.type === 'PHASE' && focus.id === phase.id
-        const phaseNode: GraphNode = { key: key('PHASE', phase.id), sourceId: phase.id, type: 'PHASE', label: phase.title, position: { x: (phaseIndex - (phases.length - 1) / 2) * 190, y: 5 }, status: phase.archivedAt ? 'ARCHIVED' : 'ACTIVE', goalId: goal.id, roadmapId: roadmap.id, phaseId: phase.id, parentKey: key('GOAL', goal.id), emphasis: phaseFocused ? 'primary' : 'normal', archived: Boolean(phase.archivedAt), record: phase }
+        // An odd number of branches must not place a Phase directly over YOU.
+        const phaseNode: GraphNode = { key: key('PHASE', phase.id), sourceId: phase.id, type: 'PHASE', label: phase.title, position: { x: (phaseIndex - (phases.length - 1) / 2) * 190 + (phases.length % 2 ? 95 : 0), y: 5 }, status: phase.archivedAt ? 'ARCHIVED' : 'ACTIVE', goalId: goal.id, roadmapId: roadmap.id, phaseId: phase.id, parentKey: key('GOAL', goal.id), emphasis: phaseFocused ? 'primary' : 'normal', archived: Boolean(phase.archivedAt), record: phase }
         addNode(nodes, phaseNode); addEdge(key('GOAL', goal.id), phaseNode.key)
         if (phaseFocused || focus.type === 'GOAL') {
           const ordered = data.roadmapSteps.filter(step => step.roadmapId === roadmap.id && step.phaseId === phase.id && (filter === 'ALL' || !step.archivedAt)).sort((a, b) => a.order - b.order)
@@ -109,10 +110,20 @@ export const projectSystemGraph = layoutSystemGraph
 export function searchSystemGraph(data: SystemData, query: string, filter: GraphFilter = 'ACTIVE'): Array<{ key: string; type: GraphNodeType; sourceId: string; label: string }> {
   const term = normalized(query); if (!term) return []
   const graph = layoutSystemGraph(data, { type: 'GLOBAL' }, filter)
+  const goalVisible = (goalId: string) => {
+    const goal = data.goals.find(entry => entry.id === goalId)
+    const path = data.paths.find(entry => entry.id === goal?.pathId)
+    return Boolean(goal && path && visible(goal.status, filter) && visible(path.status, filter))
+  }
+  const routeVisible = (roadmapId: string) => {
+    const route = data.roadmaps.find(entry => entry.id === roadmapId)
+    return Boolean(route && visible(route.status, filter) && goalVisible(route.goalId))
+  }
   const records = [
     ...graph.nodes,
-    ...data.roadmapPhases.filter(phase => filter === 'ALL' || !phase.archivedAt).map(phase => ({ key: key('PHASE', phase.id), type: 'PHASE' as const, sourceId: phase.id, label: phase.title })),
-    ...data.roadmapSteps.filter(step => filter === 'ALL' || !step.archivedAt).map(step => ({ key: key('STEP', step.id), type: 'STEP' as const, sourceId: step.id, label: step.title })),
+    ...data.goals.filter(goal => goalVisible(goal.id)).map(goal => ({ key: key('GOAL', goal.id), type: 'GOAL' as const, sourceId: goal.id, label: goal.title })),
+    ...data.roadmapPhases.filter(phase => routeVisible(phase.roadmapId) && (filter === 'ALL' || !phase.archivedAt)).map(phase => ({ key: key('PHASE', phase.id), type: 'PHASE' as const, sourceId: phase.id, label: phase.title })),
+    ...data.roadmapSteps.filter(step => routeVisible(step.roadmapId) && (filter === 'ALL' || !step.archivedAt && !data.roadmapPhases.find(phase => phase.id === step.phaseId)?.archivedAt)).map(step => ({ key: key('STEP', step.id), type: 'STEP' as const, sourceId: step.id, label: step.title })),
   ].filter((node, index, all) => node.sourceId && normalized(node.label).includes(term) && all.findIndex(other => other.key === node.key) === index)
   return records.map(node => ({ key: node.key, type: node.type, sourceId: node.sourceId!, label: node.label }))
 }

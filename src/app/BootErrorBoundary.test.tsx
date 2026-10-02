@@ -86,9 +86,9 @@ describe('BootErrorBoundary', () => {
   it('does not interfere with the normal application', () => {
     render(<App />)
 
-    // With no journey and no draft, the startup loader redirects to onboarding
-    expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /start my journey/i })).toBeInTheDocument()
+    // Beta V1 opens the System independently of the legacy Journey guard.
+    expect(screen.getByRole('heading', { name: 'Become visible to yourself.', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Enter the System/i })).toBeInTheDocument()
   })
 
   // 2 + 3 + 5. A child throws during render; the boundary catches it and

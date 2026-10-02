@@ -16,10 +16,8 @@ import { YouScreen } from '../features/you/YouScreen'
 import { NotFoundScreen } from '../features/notfound/NotFoundScreen'
 import { SystemScreen } from '../features/system/SystemScreen'
 import {
-  rootLoader,
   todayLoader,
   appShellRouteLoader,
-  RootRedirect,
   TodayRedirect,
   AppShellGuard,
 } from './StartupRedirect'
@@ -29,7 +27,7 @@ import {
  *
  * The routing hierarchy:
  *
- * 1. Root route (/) - decides whether to go to /today or /onboarding
+ * 1. Root route (/) - opens ASCEND System; /system is an alias
  * 2. /today route (TOP-LEVEL) - runs loader to check for Journey, renders TodayRedirect
  * 3. AppShell with guard - protects journey, progress, you routes
  * 4. Onboarding - sibling of AppShell, always accessible
@@ -42,14 +40,12 @@ import {
  */
 export const router = createBrowserRouter([
   /*
-   * Root route: decides where a user landing on / should go.
-   *
-   * Redirects to /today if Journey exists, otherwise to /onboarding.
+   * Beta V1 entry shares the same SystemScreen as /system.
+   * Legacy routes and their persistence remain available independently.
    */
   {
     path: '/',
-    loader: rootLoader,
-    element: <RootRedirect />,
+    element: <SystemScreen />,
   },
 
   /*
@@ -69,9 +65,8 @@ export const router = createBrowserRouter([
   },
 
   /*
-   * ASCEND SYSTEM is an isolated prototype surface. It intentionally sits
-   * outside the guarded production shell: sample fixtures only, no Journey
-   * requirement, and no access to the existing persistence contracts.
+   * Compatibility alias for the primary System experience. System data stays
+   * under its existing key, outside the legacy Journey guard.
    */
   {
     path: '/system',

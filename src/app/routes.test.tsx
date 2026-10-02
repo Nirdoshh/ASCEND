@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { progressJourney } from '../test/progressFixtures'
 import { ASCEND_JOURNEY_KEY } from '../data/storage/keys'
+import { dailyPlanStorageKey } from '../domain/dailyPlan'
+import { todayWinStorageKey } from '../domain/todayWin'
+import { dailyStepsStorageKey } from '../domain/dailyStep'
 
 /**
  * Route smoke test.
@@ -20,9 +23,8 @@ import { ASCEND_JOURNEY_KEY } from '../data/storage/keys'
  * `window.location` at that moment, so each case resets modules, sets the
  * URL, then imports `App` fresh.
  *
- * For the root (/) and /today routes, the startup loaders redirect based
- * on stored data. With no Journey and no draft (the test default), both
- * redirect to /onboarding.
+ * Root opens System independently of legacy data. The legacy /today route
+ * still redirects to /onboarding when no Journey or draft is present.
  *
  * Protected app routes (/journey, /progress, /you, /design-system) also
  * redirect to /onboarding when no active Journey exists.
@@ -43,6 +45,21 @@ async function renderAt(path: string) {
 }
 
 describe('routes', () => {
+  it.each(['/', '/system'])('opens %s while preserving all legacy user data', async path => {
+    const legacy = {
+      [ASCEND_JOURNEY_KEY]: JSON.stringify(progressJourney()),
+      [dailyPlanStorageKey(progressJourney().id, '2026-10-02')]: 'saved plan bytes',
+      [todayWinStorageKey('dp_legacy')]: 'saved win bytes',
+      [dailyStepsStorageKey('dp_legacy')]: 'saved step bytes',
+    }
+    for (const [key, bytes] of Object.entries(legacy)) window.localStorage.setItem(key, bytes)
+    await renderAt(path)
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Enter the System' }))
+    await screen.findByRole('heading', { name: 'Today', level: 1 })
+    expect(window.location.pathname).toBe(path)
+    for (const [key, bytes] of Object.entries(legacy)) expect(window.localStorage.getItem(key)).toBe(bytes)
+  })
+
   it('keeps Today in the shared shell and supports keyboard navigation to Progress and back', async () => {
     window.localStorage.setItem(ASCEND_JOURNEY_KEY, JSON.stringify(progressJourney()))
     await renderAt('/today')
@@ -74,10 +91,9 @@ describe('routes', () => {
 
   const cases = [
     /*
-     * Root and /today redirect to onboarding when no Journey exists.
-     * These test the startup routing decision for a first-time user.
+     * Root opens System; /today retains legacy startup routing.
      */
-    { path: '/', heading: 'Become the person you want to be.' },
+    { path: '/', heading: 'Become visible to yourself.' },
     { path: '/today', heading: 'Become the person you want to be.' },
 
     /*
@@ -138,7 +154,7 @@ describe('routes', () => {
     expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
   })
 
-  it('keeps the System prototype isolated from Journey startup routing', async () => {
+  it('keeps /system available outside Journey startup routing', async () => {
     await renderAt('/system')
 
     expect(await screen.findByRole('heading', { name: /Become visible to yourself/ })).toBeInTheDocument()

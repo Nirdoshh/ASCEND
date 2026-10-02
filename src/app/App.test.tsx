@@ -20,29 +20,28 @@ import { App } from '../App'
  * "some component needs router context" into a failing assertion instead
  * of a blank page.
  *
- * Note: The routing behavior (redirect to onboarding when no journey exists)
- * is tested in `routes.test.tsx` and `startup.test.ts`. This test only
- * verifies the App component tree renders without router context errors.
+ * The release root opens System. Legacy startup routing is still covered by
+ * `routes.test.tsx` and `startup.test.ts` independently of this composition.
  */
 describe('App', () => {
   it('renders without an unhandled router-context error', () => {
     expect(() => render(<App />)).not.toThrow()
   })
 
-  it('renders the onboarding screen at the default route when no journey exists', () => {
+  it('renders System at the default route without a Journey', () => {
     render(<App />)
 
-    // With no journey and no draft, the startup loader redirects to onboarding
-    expect(screen.getByRole('heading', { name: 'Become the person you want to be.', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /start my journey/i })).toBeInTheDocument()
+    // The release entry is independent of legacy Journey data.
+    expect(screen.getByRole('heading', { name: 'Become visible to yourself.', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Enter the System/i })).toBeInTheDocument()
   })
 
-  it('navigates between onboarding routes through the real router', async () => {
+  it('enters System through the real root router', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /start my journey/i }))
+    await user.click(screen.getByRole('button', { name: /Enter the System/i }))
 
-    expect(screen.getByRole('heading', { name: 'What do you want to improve?', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Today', level: 1 })).toBeInTheDocument()
   })
 })
