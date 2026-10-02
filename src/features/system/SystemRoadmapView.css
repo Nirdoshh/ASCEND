@@ -1,0 +1,62 @@
+.path-view-switch { display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.path-view-switch button { min-height: 44px; min-width: 90px; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font-size: 11px; letter-spacing: .14em; }
+.path-view-switch button[aria-pressed="true"] { border-bottom-color: var(--violet); color: var(--violet-bright); }
+.roadmap-path-choice, .roadmap-goal-choice { display: grid; gap: 8px; max-width: 520px; margin-bottom: 22px; color: var(--copy); font-size: 12px; }
+.roadmap-view { max-width: 780px; margin-inline: auto; padding-bottom: 30px; }
+.system-path select, .roadmap-form input, .roadmap-form textarea { min-width: 0; min-height: 44px; width: 100%; padding: 10px 12px; border: 1px solid #677395; border-radius: 4px; background: var(--panel); color: var(--ink); font: inherit; }
+.system-path select:focus-visible, .roadmap-form input:focus-visible, .roadmap-form textarea:focus-visible, .roadmap-history summary:focus-visible { outline: 2px solid var(--violet-bright); outline-offset: 3px; }
+.roadmap-heading, .roadmap-phase > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.roadmap-heading h2 { margin-top: 9px; font-size: clamp(25px, 3vw, 34px); overflow-wrap: anywhere; }
+.roadmap-heading p:not(.system-eyebrow), .roadmap-current > p:not(.system-eyebrow), .roadmap-phase header p, .roadmap-step-content > p:not(.roadmap-step-state) { margin-top: 8px; color: var(--copy); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.roadmap-status { flex-shrink: 0; padding-top: 5px; color: var(--copy); font-size: 10px; letter-spacing: .09em; }
+.roadmap-feedback { color: var(--copy); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.roadmap-feedback:not(:empty) { margin-top: 14px; padding: 12px; border: 1px solid var(--line-strong); }
+.roadmap-feedback[role="alert"] { color: var(--ink); }
+.roadmap-toolbar, .roadmap-edit-actions, .roadmap-step-actions, .roadmap-reorder { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.roadmap-toolbar { margin: 10px 0 22px; }
+.roadmap-view .text-link { min-height: 44px; min-width: 44px; }
+.roadmap-view button:disabled, .roadmap-path-choice select:disabled { color: var(--muted); cursor: default; }
+.roadmap-current { margin: 22px 0; padding: 24px; border: 1px solid var(--line-strong); border-left: 3px solid var(--violet); border-radius: 5px; background: var(--panel); }
+.roadmap-current h3 { margin-top: 12px; font-size: clamp(24px, 3vw, 31px); font-weight: 500; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.roadmap-current > div { margin-top: 18px; }
+.roadmap-progress { margin: 20px 0 28px; color: var(--copy); font-size: 12px; line-height: 1.7; }
+.roadmap-progress span { color: var(--muted); }
+.roadmap-phases, .roadmap-steps { padding: 0; margin: 0; list-style: none; }
+.roadmap-phase { position: relative; margin-left: 15px; padding: 0 0 32px 28px; border-left: 1px solid var(--line); }
+.roadmap-phase-number { position: absolute; left: -16px; top: -2px; display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--bg); color: var(--violet-bright); font-size: 11px; }
+.roadmap-phase header h3 { padding-top: 3px; font-size: 17px; font-weight: 500; overflow-wrap: anywhere; }
+.roadmap-phase header > div { min-width: 0; }
+.roadmap-edit-actions { margin: 8px 0; }
+.roadmap-edit-actions .text-link, .roadmap-step-actions .text-link { color: var(--copy); font-size: 11px; }
+.roadmap-step { display: flex; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+.roadmap-step-content { flex: 1; min-width: 0; }
+.roadmap-step h4 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
+.roadmap-step-mark { display: grid; width: 20px; height: 24px; flex: 0 0 20px; place-items: center; color: var(--teal); }
+.roadmap-step-mark span { width: 11px; height: 11px; border: 1px solid var(--copy); border-radius: 50%; }
+.roadmap-step--active { border-left: 2px solid var(--violet); margin-left: -10px; padding-left: 8px; background: rgb(142 125 255 / .05); }
+.roadmap-step--active .roadmap-step-mark span { background: var(--violet-bright); border-color: var(--violet-bright); }
+.roadmap-step--locked .roadmap-step-mark span { border-radius: 1px; transform: rotate(45deg); }
+.roadmap-step--locked h4, .roadmap-step--completed h4 { color: var(--copy); }
+.roadmap-step-state { margin-top: 6px !important; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.roadmap-step--active .roadmap-step-state { color: var(--violet-bright); }
+.roadmap-phase-empty { padding: 15px 0; color: var(--copy); font-size: 13px; }
+.roadmap-add-step { display: flex; align-items: center; gap: 6px; }
+.roadmap-form { margin-top: 24px; padding: 20px; border: 1px solid var(--line-strong); background: var(--panel); }
+.roadmap-form > p { color: var(--copy); font-size: 12px; overflow-wrap: anywhere; }
+.roadmap-form fieldset { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); }
+.roadmap-form fieldset p { color: var(--copy); font-size: 12px; line-height: 1.5; }
+.roadmap-form .roadmap-checkbox { display: flex; align-items: center; gap: 12px; min-height: 44px; color: var(--copy); line-height: 1.5; overflow-wrap: anywhere; }
+.roadmap-form .roadmap-checkbox input { width: 20px; height: 20px; min-height: 20px; flex: 0 0 20px; accent-color: var(--violet); }
+.roadmap-history { margin-top: 25px; color: var(--copy); font-size: 12px; }
+.roadmap-history summary { min-height: 44px; padding-block: 14px; cursor: pointer; }
+.roadmap-history article { padding: 15px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.roadmap-history h3 { font-size: 14px; }.roadmap-history p { margin-top: 8px; }
+.roadmap-view .system-empty-state .system-button { margin-top: 18px; }
+@media (max-width: 600px) {
+  .roadmap-current { padding: 18px 16px; }
+  .roadmap-heading { gap: 12px; flex-wrap: wrap; }
+  .roadmap-phase { padding-left: 23px; }
+  .roadmap-phase > header { gap: 10px; flex-wrap: wrap; }
+  .roadmap-form { padding: 16px; }
+  .roadmap-step-actions { gap: 0 12px; }
+}

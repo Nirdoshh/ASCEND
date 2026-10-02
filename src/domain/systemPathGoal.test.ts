@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { changeGoalStatus, createGoal, createPath, createSuggestedSystemData, normalizeSystemData, SYSTEM_SCHEMA_VERSION, updateGoal } from './systemPathGoal'
+import { changeGoalStatus, createGoal, createPath, createSystemData, createSuggestedSystemData, normalizeSystemData, SYSTEM_SCHEMA_VERSION, updateGoal } from './systemPathGoal'
 
 const NOW = '2026-10-02T12:00:00.000Z'
 
@@ -26,8 +26,8 @@ describe('System Path and Goal domain', () => {
   it('rejects duplicate ids, missing parents, malformed records, and future data', () => {
     const path = createPath({ id: 'path_one', name: 'BODY', now: NOW })
     const goal = createGoal({ id: 'goal_one', pathId: path.id, title: 'Run 5K', now: NOW })
-    expect(normalizeSystemData({ schemaVersion: 1, paths: [path, path], goals: [] })).toBeNull()
-    expect(normalizeSystemData({ schemaVersion: 1, paths: [path], goals: [{ ...goal, pathId: 'path_missing' }] })).toBeNull()
+    expect(normalizeSystemData(createSystemData([path, path]))).toBeNull()
+    expect(normalizeSystemData(createSystemData([path], [{ ...goal, pathId: 'path_missing' }]))).toBeNull()
     expect(normalizeSystemData({ schemaVersion: 99, paths: [], goals: [] })).toBeNull()
   })
 })

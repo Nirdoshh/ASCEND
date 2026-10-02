@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { createSystemApplicationService } from '../../application/systemPaths'
+import { createSystemRoadmapService } from '../../application/systemRoadmaps'
 import { defaultSystemRepository } from '../../data/repositories/defaults'
 import type { SystemRepository } from '../../data/repositories/systemRepository'
 import { createSystemData, type SystemData } from '../../domain/systemPathGoal'
@@ -64,6 +65,7 @@ export function SystemScreen({ repository }: { repository?: SystemRepository } =
   const [systemProblem, setSystemProblem] = useState<string | null>(null)
   const systemRepository = useMemo(() => repository ?? defaultSystemRepository, [repository])
   const systemService = useMemo(() => createSystemApplicationService(systemRepository), [systemRepository])
+  const roadmapService = useMemo(() => createSystemRoadmapService(systemRepository), [systemRepository])
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const loaded = systemService.load()
@@ -82,7 +84,7 @@ export function SystemScreen({ repository }: { repository?: SystemRepository } =
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }) }, [view, lockIn])
   useEffect(() => { if (!pulse) return; const timeout = window.setTimeout(() => setPulse(false), 1200); return () => window.clearTimeout(timeout) }, [pulse])
   const completeObjective = (id: string) => { setObjectives((current) => ({ ...current, [id]: !current[id] })); if (!objectives[id]) { setPulse(true); setView('path') } }
-  if (!awakened) return <div className="system-app system-awakening"><div className="awakening-content"><SystemMark /><Eyebrow>ASCEND / SYSTEM BETA 1</Eyebrow><h1>Become <em>visible</em> to yourself.</h1><p>Turn intention into real-world movement. Follow the signal upward.</p><button type="button" className="system-button system-button--primary" onClick={() => setAwakened(true)}>Enter the System <ArrowIcon /></button><small>Real Paths and Goals / saved locally</small></div></div>
-  if (lockIn) return <LockInView objectives={objectives} onObjective={completeObjective} onExit={() => { const dialog = document.getElementById('lockin-exit'); if (dialog instanceof HTMLDialogElement) dialog.close(); setLockIn(false); setView('today') }} />
-  return <div className="system-app"><SystemNav view={view} onView={(next) => { setView(next) }} /><main className="system-main" data-system-view={view}><div className="system-main__topline"><span>ASCEND</span></div>{view === 'today' && <TodayView objectives={objectives} onObjective={completeObjective} onEnterLockIn={() => setLockIn(true)} onViewPath={() => setView('path')} />}{view === 'path' && systemData && <SystemPathView data={systemData} onData={setSystemData} service={systemService} storageProblem={systemProblem} pulse={pulse} onRetry={() => { const result = systemService.seedIfAbsent(new Date().toISOString()); if (result.ok) { setSystemData(result.data); setSystemProblem(null) } }} />}{view === 'status' && <StatusView />}{view === 'you' && <YouView />}</main></div>
+  if (!awakened) return <div className="system-app system-awakening"><div className="awakening-content"><SystemMark /><Eyebrow>ASCEND / SYSTEM BETA 2</Eyebrow><h1>Become <em>visible</em> to yourself.</h1><p>Turn intention into real-world movement. Follow the signal upward.</p><button type="button" className="system-button system-button--primary" onClick={() => setAwakened(true)}>Enter the System <ArrowIcon /></button><small>Paths, Goals, and Roadmaps / saved locally</small></div></div>
+  const lockInView = lockIn && <LockInView objectives={objectives} onObjective={completeObjective} onExit={() => { const dialog = document.getElementById('lockin-exit'); if (dialog instanceof HTMLDialogElement) dialog.close(); setLockIn(false); setView('today') }} />
+  return <>{lockInView}<div className="system-app" hidden={lockIn}><SystemNav view={view} onView={(next) => { setView(next) }} /><main className="system-main" data-system-view={view}><div className="system-main__topline"><span>ASCEND</span></div>{view === 'today' && <TodayView objectives={objectives} onObjective={completeObjective} onEnterLockIn={() => setLockIn(true)} onViewPath={() => setView('path')} />}{systemData && <div hidden={view !== 'path'}><SystemPathView data={systemData} onData={setSystemData} service={systemService} roadmapService={roadmapService} storageProblem={systemProblem} pulse={pulse} onRetry={() => { const result = systemService.seedIfAbsent(new Date().toISOString()); if (result.ok) { setSystemData(result.data); setSystemProblem(null) } }} /></div>}{view === 'status' && <StatusView />}{view === 'you' && <YouView />}</main></div></>
 }

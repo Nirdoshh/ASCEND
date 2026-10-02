@@ -1,7 +1,7 @@
 # ASCEND SYSTEM — Product Bible
 
-**Status:** ASCEND System Beta 1, October 2026
-**Scope:** Isolated `/system` experience with a local-first Path and Goal foundation. This document records the bounded prototype contract; it does not define a production backend schema.
+**Status:** ASCEND System Beta 2 — Roadmap Foundation, October 2026
+**Scope:** Isolated `/system` experience with local-first Paths, Goals, and manual Roadmaps. The approved System UI remains the visual reference (`docs/reference/approved-system-ui.png`). This document records the bounded prototype contract; it does not define a production backend schema.
 
 ## 1. Product vision
 
@@ -33,7 +33,7 @@ A Path is a user-owned direction of growth that connects identity to action. Bet
 
 Each Path has `schemaVersion`, an opaque stable `id`, `name`, optional `description`, `source` (`SUGGESTED` or `CUSTOM`), `status` (`ACTIVE`, `PAUSED`, or `ARCHIVED`), `createdAt`, and `updatedAt`. Names are presentation text; references use the id. Archiving keeps the record and its history.
 
-Beta 1 stores the collection under `ascend:system:v1`; the collection, every Path, and every Goal declare schema version 1. Future versions are left untouched and reported to the user until a deliberate migration exists. Existing Journey, DailyPlan, Today's Win, and Daily Step records remain under their existing keys.
+The stable storage key remains `ascend:system:v1`. Beta 2 upgrades the collection envelope to schema version 2; Path and Goal record contracts remain version 1. Keeping the same key makes guarded Beta 1 builds see version 2 and refuse writes rather than create a second, diverging System. Existing Journey, DailyPlan, Today's Win, and Daily Step records remain under their existing keys. Migration and Roadmap records are described below.
 
 ## 6. Goal model
 
@@ -93,7 +93,7 @@ The directive, objectives, timer, Level 18, Rank C, Stability 82%, conditions, e
 
 ## 18. Not implemented
 
-Beta 1 does not implement Roadmap, Milestones, Node Notes, backlinks, Daily Directive automation, backend, authentication, AI, native app blocking, real timers, XP formulas, Level formulas, Rank formulas, Stability formulas, penalties, production navigation, or a light System theme.
+Beta 2 does not implement AI Roadmap generation, Roadmap templates, Node Notes, `[[links]]`, backlinks, a Markdown editor, real Graph Beta, Daily Directive integration or automation, backend, authentication, native app blocking, real timers, XP, Level formulas, Rank formulas, Stability formulas, penalties, production navigation, or a light System theme. Standalone Milestone records remain unimplemented; a Roadmap Step can describe a milestone.
 
 ## 19. Copyright and originality boundary
 
@@ -114,3 +114,74 @@ True blocking of apps and sites, reliable background timing, device policy, noti
 - How should identity evolve while preserving user authorship?
 - Which graph scale and history views are useful without becoming analytics?
 - What data must be portable before any backend or native integration?
+
+## 22. Roadmap purpose and hierarchy
+
+The execution hierarchy is **YOU → PATH → GOAL → ROADMAP → PHASE → STEP**. A Roadmap answers “What route should I follow to achieve this Goal?” It belongs to exactly one real System Goal through `goalId`; it is part of the same persisted System collection, never a disconnected roadmap database.
+
+Beta 2 permits one Roadmap per Goal, including paused, completed, or archived routes. Restore and edit the existing route rather than create multiple competing routes. Multiple route alternatives remain a later product decision.
+
+**Map** answers “How does everything in my growth connect?” and remains the existing semantic graph / constellation. **Roadmap** answers “What should I do, and in what order, to reach this specific Goal?” and uses a compact vertical progression path. The Path view has a restrained MAP / ROADMAP switch. Roadmap mode selects one Path and one Goal at a time; it never dumps all routes into a graph or board. The Map graph engine, layout, and nodes are unchanged.
+
+## 23. Roadmap types and records
+
+**SKILL** supports ordered learning stages with explicit prerequisites, for example Fundamentals → DOM → Events → Async JavaScript → APIs → Build Application. **GOAL** organizes outcomes into ordered phases and milestones, for example Foundation → Run 2 km → Run 3.5 km → Run 5 km → Final Trial. Both routes are constructed manually. There is no AI, web research, marketplace, or template engine.
+
+A Roadmap has record `schemaVersion: 2`, an opaque stable `id`, `goalId`, `type` (`SKILL` or `GOAL`), `title`, optional `description`, `status` (`ACTIVE`, `PAUSED`, `COMPLETED`, `ARCHIVED`), nullable `activeStepId`, `createdAt`, and `updatedAt`. Renaming never changes identity. Pause prevents selection and completion; editing remains possible. Resume restores action. Archive keeps all content and history readable and supports restoration.
+
+## 24. Phase and Step model
+
+A Phase has record `schemaVersion: 2`, an opaque stable `id`, `roadmapId`, `title`, optional `description`, integer `order`, nullable `archivedAt`, `createdAt`, and `updatedAt`. Reordering changes order, never identity or creation time. Live sibling orders are distinct. Restoring an archived Phase appends it without overwriting the existing order. Archiving a Phase hides its children from live progression without deleting or rewriting them; archived history remains readable.
+
+A Step has record `schemaVersion: 2`, an opaque stable `id`, `roadmapId`, `phaseId`, `title`, optional `description`, integer `order`, boolean `optional`, `prerequisiteStepIds`, nullable `completedAt`, nullable `archivedAt`, `createdAt`, and `updatedAt`. It represents a meaningful skill, milestone, or stage, not a Daily Directive task. Users can add, edit, reorder, select, complete, undo completion, archive, and restore Steps. Editing a Step's title, optional property, and prerequisites is one validated save; a failed dependency edit never partially saves the text.
+
+Archive is the removal operation in Beta 2. No destructive delete exists. Completed timestamps survive archive/restore. Dependencies from live Steps prevent archiving a required prerequisite or its Phase. Dependencies inside an archived Phase remain as history. Restoring a dependent Phase may require restoring its prerequisite first. Undo is refused while a completed dependent (including archived history) or the current Step would become invalid. Users can choose another current Step or undo dependents first; no dependent history is silently rewritten.
+
+## 25. Prerequisites and derived Step states
+
+Only SKILL routes accept prerequisites. References must point to existing Steps in the same Roadmap; cross-Phase references are supported. Duplicate references, direct self-dependency, missing parents, duplicate record IDs across the System, and chains that form cycles are rejected. A live Step cannot depend on archived content. This is bounded dependency validation, not a graph editing engine.
+
+Order communicates the route, but does not implicitly lock Steps. Explicit prerequisites determine locking. Every listed prerequisite must be completed, including an optional Step that the user explicitly chose as a prerequisite. “Optional” excludes a Step from required progress; it does not bypass its own prerequisites.
+
+Step state is derived and never persisted separately:
+
+- **COMPLETED:** `completedAt` is present.
+- **LOCKED:** any listed prerequisite lacks completion.
+- **ACTIVE:** prerequisites are satisfied and `activeStepId` selects this live, incomplete Step.
+- **AVAILABLE:** prerequisites are satisfied and the Step is not selected.
+
+Optional is a property, so an optional Step can be available, active, locked, or completed. Labels and markers communicate state without relying on color.
+
+## 26. Current Step and factual progress
+
+An available Step can be explicitly selected as current. Reordering, unrelated completion, and refreshing never replace that choice. Completing or archiving the current Step clears its selection. The next live available required Step in Phase/Step order is shown as **NEXT AVAILABLE · SUGGESTED**; if no required Step is available, an available optional Step can be suggested. The user chooses whether to select it. Reading never writes the suggestion to storage. Paused and archived routes return no actionable current Step.
+
+Progress shows literal counts: completed live Steps / total live Steps, completed required live Steps / total required live Steps, and the current or suggested Step's Phase position. Archived content is retained as history but excluded from live counts. Required completion changes an active route to COMPLETED when there is at least one required Step and all are complete. For an all-optional route, all live Steps must be complete. Empty routes are never complete. Optional Steps remain actionable after required completion. Adding or restoring incomplete required content, or safely undoing completion, reopens a completed route. Paused and archived statuses stay under user control.
+
+These counts measure recorded completion, never personal mastery, skill scores, XP, Rank, Level, or Stability.
+
+## 27. Beta 2 persistence and migration
+
+The existing `SystemRepository` persists Paths, Goals, Roadmaps, Phases, and Steps in one versioned collection through `KeyValueStore`. UI → application services → domain → repository → storage remains the boundary; React never accesses Web Storage.
+
+The deliberate v1 → v2 migration validates the whole Beta 1 collection, preserves every Path and Goal, id, parent reference, status, timestamp, authored field, and unknown extension, then adds empty `roadmaps`, `roadmapPhases`, and `roadmapSteps` arrays. Path/Goal record versions stay 1. Loading migrates only in memory. Original stored bytes remain unchanged until a successful user edit writes the complete v2 collection. Migration refuses conflicting unversioned Roadmap fields rather than overwrite them.
+
+The reader rejects malformed records, orphan references, invalid dependencies, ordering collisions, and future collection or record versions as a whole. It never drops invalid records to salvage the rest. Every save rechecks the current stored bytes and refuses malformed/future data. Unsupported data stays untouched and the UI reports it. Storage and quota failures retain the prior saved collection and editor input. Guarded Beta 1 clients refuse the v2 envelope. There is no migration of production Journey data.
+
+Application services expose create/edit/pause/resume/archive Roadmap; add/edit/reorder/archive/restore Phase; add/edit/reorder/set optional/set prerequisites/set active/complete/undo/archive/restore Step; and a repository-backed `getCurrentStep(goalId)` query. Business validation is pure domain code. No Today UI dependency is introduced.
+
+LocalStorage remains synchronous and device-local. There is no cross-tab compare-and-swap or merge protocol; same-version simultaneous edits remain an inherited limitation. Before any backend or sync phase, conflict handling and export/recovery need a deliberate design.
+
+## 28. Future Graph and Today integration boundaries
+
+Beta 3 can consume these actual records using Goal `id` → Roadmap `goalId`, Roadmap `id` → Phase/Step `roadmapId`, Phase `id` → Step `phaseId`, and Step prerequisite IDs. IDs stay stable through renames, reorders, completion, and archives. Graph node identity can use namespaced keys such as `roadmap-step:<id>` and read display labels from titles; archived history remains queryable. Beta 2 exposes none of these new records as Map nodes and does not rebuild the graph.
+
+A future application service can call `getCurrentStep(goalId)` and receive either the explicitly selected Step or a separately marked suggestion. This does not generate, replace, or connect a Daily Directive. Daily Directive integration remains unimplemented.
+
+## 29. Interface safety and verification boundary
+
+The vertical route keeps the current Step dominant, completion visible, locked content readable, and optional Steps explicitly labeled. It supports no-Goal, no-Roadmap, no-Phase, empty-Phase, completed, paused, archived, storage unavailable, malformed, and future-schema states. Archive history is expandable and recoverable. Reordering uses labeled Up/Down buttons with keyboard access; no drag gesture is required. Forms have labels, focus, semantic fieldsets, status/error announcements, and 44px controls. The mobile route is a single column, not a compressed desktop timeline; System reduced-motion settings apply.
+
+An open Roadmap form must be saved or canceled before switching Goal, Path, or Map mode. System section navigation preserves the form in memory, including entering and exiting Lock-In. A browser unload guard protects an open form from silent navigation loss; drafts are not separately persisted. This is a bounded safety behavior, not a Notes or draft persistence system.
+
+The remaining sample fixtures are the Beta 1 directive, objectives, timer, Level, Rank, Stability, condition, evidence counts, identity statement, configuration counts, and graph completion pulse. No Roadmap, Phase, or Step is sample-seeded. Numerical formulas and every deferred feature in section 18 remain unresolved or unimplemented. Stop after Beta 2; no deployment or automatic Beta 3 work.

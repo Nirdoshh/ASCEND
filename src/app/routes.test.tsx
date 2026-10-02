@@ -142,6 +142,6 @@ describe('routes', () => {
     await renderAt('/system')
 
     expect(await screen.findByRole('heading', { name: /Become visible to yourself/ })).toBeInTheDocument()
-    expect(screen.getByText('Real Paths and Goals / saved locally')).toBeInTheDocument()
+    expect(screen.getByText('Paths, Goals, and Roadmaps / saved locally')).toBeInTheDocument()
   })
 })

@@ -60,7 +60,7 @@ export function createSystemApplicationService(repository: SystemRepository): Sy
       try {
         const path = createPath(input)
         if (current.paths.some((entry) => entry.id === path.id)) return { ok: false, problem: 'invalid-data' }
-        return write(repository, createSystemData([...current.paths, path], current.goals))
+        return write(repository, { ...current, paths: [...current.paths, path] })
       } catch { return { ok: false, problem: 'invalid-input' } }
     },
 
@@ -70,7 +70,7 @@ export function createSystemApplicationService(repository: SystemRepository): Sy
       const current = currentResult.data
       const path = current.paths.find((entry) => entry.id === id)
       if (!path) return { ok: false, problem: 'not-found' }
-      try { return write(repository, createSystemData(current.paths.map((entry) => entry.id === id ? updatePath(path, input) : entry), current.goals)) } catch { return { ok: false, problem: 'invalid-input' } }
+      try { return write(repository, { ...current, paths: current.paths.map((entry) => entry.id === id ? updatePath(path, input) : entry) }) } catch { return { ok: false, problem: 'invalid-input' } }
     },
 
     setPathStatus(id, status, now) {
@@ -78,7 +78,7 @@ export function createSystemApplicationService(repository: SystemRepository): Sy
       if (!currentResult.ok) return currentResult
       const current = currentResult.data
       const path = current.paths.find((entry) => entry.id === id)
-      return path ? write(repository, createSystemData(current.paths.map((entry) => entry.id === id ? changePathStatus(entry, status, now) : entry), current.goals)) : { ok: false, problem: 'not-found' }
+      return path ? write(repository, { ...current, paths: current.paths.map((entry) => entry.id === id ? changePathStatus(entry, status, now) : entry) }) : { ok: false, problem: 'not-found' }
     },
 
     createGoal(input) {
@@ -89,7 +89,7 @@ export function createSystemApplicationService(repository: SystemRepository): Sy
       try {
         const goal = createGoal(input)
         if (current.goals.some((entry) => entry.id === goal.id)) return { ok: false, problem: 'invalid-data' }
-        return write(repository, createSystemData(current.paths, [...current.goals, goal]))
+        return write(repository, { ...current, goals: [...current.goals, goal] })
       } catch { return { ok: false, problem: 'invalid-input' } }
     },
 
@@ -99,7 +99,7 @@ export function createSystemApplicationService(repository: SystemRepository): Sy
       const current = currentResult.data
       const goal = current.goals.find((entry) => entry.id === id)
       if (!goal) return { ok: false, problem: 'not-found' }
-      try { return write(repository, createSystemData(current.paths, current.goals.map((entry) => entry.id === id ? updateGoal(goal, input) : entry))) } catch { return { ok: false, problem: 'invalid-input' } }
+      try { return write(repository, { ...current, goals: current.goals.map((entry) => entry.id === id ? updateGoal(goal, input) : entry) }) } catch { return { ok: false, problem: 'invalid-input' } }
     },
 
     setGoalStatus(id, status, now) {
@@ -107,7 +107,7 @@ export function createSystemApplicationService(repository: SystemRepository): Sy
       if (!currentResult.ok) return currentResult
       const current = currentResult.data
       const goal = current.goals.find((entry) => entry.id === id)
-      return goal ? write(repository, createSystemData(current.paths, current.goals.map((entry) => entry.id === id ? changeGoalStatus(entry, status, now) : entry))) : { ok: false, problem: 'not-found' }
+      return goal ? write(repository, { ...current, goals: current.goals.map((entry) => entry.id === id ? changeGoalStatus(entry, status, now) : entry) }) : { ok: false, problem: 'not-found' }
     },
   }
 }

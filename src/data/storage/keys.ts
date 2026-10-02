@@ -36,5 +36,6 @@ export const ASCEND_ONBOARDING_DRAFT_KEY = 'ascend:onboarding-draft:v1'
  */
 export const ASCEND_JOURNEY_KEY = 'ascend:journey:v1'
 
-/** Beta 1 System Paths and Goals. Kept beside, never merged into, Journey data. */
+/** Stable System key. Collection v2 upgrades in place so guarded Beta 1 builds
+ * see the future version and refuse writes rather than fork the user's data. */
 export const ASCEND_SYSTEM_KEY = 'ascend:system:v1'
