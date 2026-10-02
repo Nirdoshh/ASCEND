@@ -105,6 +105,16 @@
   gap: var(--space-3);
   padding-block: var(--space-2);
   animation: today-step-in var(--duration-normal) var(--ease-out) both;
+  transition:
+    background-color var(--duration-normal) var(--ease-standard),
+    color var(--duration-normal) var(--ease-standard);
+}
+
+.today__step-row--completed {
+  color: var(--text-secondary);
+  background-color: var(--surface-sunken);
+  border-radius: var(--radius-md);
+  padding-inline: var(--space-2);
 }
 
 .today__step-row:nth-child(2) {
@@ -131,6 +141,64 @@
   font-weight: var(--weight-semibold);
 }
 
+.today__step-leading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.today__step-completion {
+  position: relative;
+  display: block;
+  inline-size: var(--tap-min);
+  block-size: var(--tap-min);
+}
+
+.today__step-completion input {
+  appearance: none;
+  display: block;
+  inline-size: var(--tap-min);
+  block-size: var(--tap-min);
+  margin: 0;
+  border: 2px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background-color: var(--surface-raised);
+  color: var(--text-on-accent);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-instant) var(--ease-standard);
+}
+
+.today__step-completion input:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+.today__step-completion input:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.today__step-completion input:checked {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+}
+
+.today__step-completion input:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.today__step-check-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-on-accent);
+  pointer-events: none;
+}
+
 .today__step-main {
   display: flex;
   flex: 1 1 12rem;
@@ -142,6 +210,12 @@
 .today__step-text {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.today__step-row--completed .today__step-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
 }
 
 .today__step-actions {
@@ -163,6 +237,19 @@
 
 .today__feedback {
   min-block-size: 1.5rem;
+}
+
+.today__complete-ack {
+  margin: 0;
+  color: var(--color-success);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.today__step-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
 }
 
 .today__feedback:not(:empty) {

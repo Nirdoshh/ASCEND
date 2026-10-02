@@ -1,12 +1,11 @@
 /**
  * Daily Step — a single action that moves toward Today's Win.
  *
- * Phase 3C: Daily Steps support Today's Win.
+ * Phase 3D: Daily Steps support explicit completion state.
  *
  * This is NOT:
- * - a checklist with completion state (Phase 3D+)
- * - a streak (Phase 3D+)
  * - a score (Phase 3D+)
+ * - a streak (Phase 3D+)
  * - a milestone (already exists for Journey)
  * - a generic task (the user decides their steps)
  *
@@ -21,7 +20,8 @@ export const DAILY_STEP_ID_PREFIX = 'ds_'
  * Bumped when a stored step would be read WRONG by a build other than
  * the one that wrote it. Follows ADR 0011 pattern.
  */
-export const DAILY_STEP_SCHEMA_VERSION = 1
+export const DAILY_STEP_SCHEMA_VERSION = 2
+export const DAILY_STEP_PREVIOUS_SCHEMA_VERSION = 1
 
 /**
  * Maximum length for Daily Step text.
@@ -48,6 +48,8 @@ export interface DailyStep {
   readonly id: string
   /** The user's action in their own words. */
   readonly text: string
+  /** ISO timestamp when the user completed the action, or null when open. */
+  readonly completedAt: string | null
 }
 
 /**
@@ -78,6 +80,7 @@ export function createDailyStep(
     schemaVersion: DAILY_STEP_SCHEMA_VERSION,
     id: stepId,
     text: text.trim(),
+    completedAt: null,
   }
 }
 
@@ -96,6 +99,49 @@ export function updateDailyStep(
     ...step,
     text: normalizedText,
   }
+}
+
+/** Returns true only when a persisted completion timestamp is present. */
+export function isDailyStepCompleted(step: DailyStep): boolean {
+  return step.completedAt !== null
+}
+
+/** Marks a step complete without changing an existing completion timestamp. */
+export function completeDailyStep(step: DailyStep, completedAt: string): DailyStep {
+  if (isDailyStepCompleted(step)) return step
+  return { ...step, completedAt }
+}
+
+/** Clears completion while preserving the step's identity, text, and order. */
+export function uncompleteDailyStep(step: DailyStep): DailyStep {
+  if (!isDailyStepCompleted(step)) return step
+  return { ...step, completedAt: null }
+}
+
+/** Completion timestamps must be parseable ISO timestamps. */
+export function isValidDailyStepCompletionTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value))
+}
+
+/**
+ * Deterministically upgrades the Phase 3C array shape to Phase 3D.
+ * No IDs, text, or array order are regenerated.
+ */
+export function migrateDailyStepsV1ToV2(raw: unknown): unknown {
+  if (!Array.isArray(raw)) return raw
+
+  const isV1 = raw.every((item) => {
+    if (typeof item !== 'object' || item === null) return false
+    return (item as Record<string, unknown>).schemaVersion === DAILY_STEP_PREVIOUS_SCHEMA_VERSION
+  })
+
+  if (!isV1) return raw
+
+  return raw.map((item) => ({
+    ...(item as Record<string, unknown>),
+    schemaVersion: DAILY_STEP_SCHEMA_VERSION,
+    completedAt: null,
+  }))
 }
 
 /**
@@ -152,10 +198,15 @@ export function normalizeDailySteps(raw: unknown): DailyStep[] | null {
     if (seenTexts.has(duplicateKey)) return null
     seenTexts.add(duplicateKey)
 
+    if (!Object.prototype.hasOwnProperty.call(obj, 'completedAt')) return null
+    const completedAt = obj.completedAt
+    if (completedAt !== null && !isValidDailyStepCompletionTimestamp(completedAt)) return null
+
     steps.push({
       schemaVersion: DAILY_STEP_SCHEMA_VERSION,
       id,
       text: normalizedText,
+      completedAt,
     })
   }
 

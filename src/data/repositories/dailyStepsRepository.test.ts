@@ -65,6 +65,34 @@ describe('dailyStepsRepository', () => {
       expect(stepAt(steps, 1).text).toBe('Test the full onboarding flow')
     })
 
+    it('keeps completion isolated between DailyPlans', async () => {
+      const repo = createRepo()
+      const otherPlanId = 'dp_other123456789'
+      const completed = { ...createStep(), completedAt: NOW }
+      const incomplete = createStep({ id: 'ds_other' })
+
+      expect(await repo.save(DAILY_PLAN_ID, [completed])).toBe('ok')
+      expect(await repo.save(otherPlanId, [incomplete])).toBe('ok')
+      expect(repo.loadForPlan(DAILY_PLAN_ID)[0]?.completedAt).toBe(NOW)
+      expect(repo.loadForPlan(otherPlanId)[0]?.completedAt).toBeNull()
+    })
+
+    it('migrates schema-v1 steps to incomplete schema-v2 steps', () => {
+      const repo = createRepo()
+      const key = dailyStepsStorageKey(DAILY_PLAN_ID)
+      const legacy = [
+        { schemaVersion: 1, id: 'ds_first', text: 'First action' },
+        { schemaVersion: 1, id: 'ds_second', text: 'Second action' },
+      ]
+      window.localStorage.setItem(key, JSON.stringify(legacy))
+
+      expect(repo.loadForPlan(DAILY_PLAN_ID)).toEqual([
+        { schemaVersion: 2, id: 'ds_first', text: 'First action', completedAt: null },
+        { schemaVersion: 2, id: 'ds_second', text: 'Second action', completedAt: null },
+      ])
+      expect(window.localStorage.getItem(key)).toBe(JSON.stringify(legacy))
+    })
+
     it('returns empty array for future schema', () => {
       const repo = createRepo()
       const step = createStep()
@@ -83,6 +111,16 @@ describe('dailyStepsRepository', () => {
 
       const loaded = repo.loadForPlan(DAILY_PLAN_ID)
       expect(loaded).toEqual([])
+    })
+
+    it('returns empty array for a malformed completion timestamp', () => {
+      const repo = createRepo()
+      const key = dailyStepsStorageKey(DAILY_PLAN_ID)
+      window.localStorage.setItem(key, JSON.stringify([
+        { schemaVersion: 2, id: 'ds_bad', text: 'Action', completedAt: 'not-a-date' },
+      ]))
+
+      expect(repo.loadForPlan(DAILY_PLAN_ID)).toEqual([])
     })
 
     it('returns empty array for duplicate stored ids or text', () => {
@@ -142,6 +180,18 @@ describe('dailyStepsRepository', () => {
       expect(stepAt(loadedSteps, 1).text).toBe('New step 2')
     })
 
+    it('persists completed and uncompleted states without changing order', async () => {
+      const repo = createRepo()
+      const completed = { ...createStep({ text: 'First action', id: 'ds_first' }), completedAt: NOW }
+      const incomplete = createStep({ text: 'Second action', id: 'ds_second' })
+
+      expect(await repo.save(DAILY_PLAN_ID, [completed, incomplete])).toBe('ok')
+      expect(repo.loadForPlan(DAILY_PLAN_ID)).toEqual([completed, incomplete])
+      expect(await repo.save(DAILY_PLAN_ID, [incomplete, { ...completed, completedAt: null }])).toBe('ok')
+      expect(repo.loadForPlan(DAILY_PLAN_ID).map((step) => step.id)).toEqual(['ds_second', 'ds_first'])
+      expect(repo.loadForPlan(DAILY_PLAN_ID)[1]?.completedAt).toBeNull()
+    })
+
     it('returns newer-schema if existing steps have future schema', () => {
       const repo = createRepo()
       const futureSteps = [{ ...createStep(), schemaVersion: 999 }]
@@ -153,6 +203,16 @@ describe('dailyStepsRepository', () => {
 
       expect(result).toBe('newer-schema')
       expect(window.localStorage.getItem(key)).toBe(JSON.stringify(futureSteps))
+    })
+
+    it('refuses to overwrite malformed current-schema data', () => {
+      const repo = createRepo()
+      const key = dailyStepsStorageKey(DAILY_PLAN_ID)
+      const malformed = [{ schemaVersion: 2, id: 'ds_bad', text: 'Action', completedAt: 'invalid' }]
+      window.localStorage.setItem(key, JSON.stringify(malformed))
+
+      expect(repo.save(DAILY_PLAN_ID, [createStep()])).toBe('invalid-data')
+      expect(window.localStorage.getItem(key)).toBe(JSON.stringify(malformed))
     })
 
     it('preserves an over-full persisted list instead of truncating it', () => {

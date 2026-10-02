@@ -6,6 +6,10 @@ import {
   DAILY_STEP_ID_PREFIX,
   createDailyStepId,
   createDailyStep,
+  completeDailyStep,
+  isDailyStepCompleted,
+  isValidDailyStepCompletionTimestamp,
+  migrateDailyStepsV1ToV2,
   updateDailyStep,
   validateDailyStepText,
   normalizeDailySteps,
@@ -15,6 +19,7 @@ import {
   isDuplicateDailyStep,
   isAtMaxDailySteps,
   validateDailyStepCount,
+  uncompleteDailyStep,
 } from '../domain/dailyStep'
 
 const NOW = '2026-10-01T09:00:00.000Z'
@@ -49,6 +54,7 @@ describe('dailyStep domain', () => {
       expect(step.schemaVersion).toBe(DAILY_STEP_SCHEMA_VERSION)
       expect(step.id).toBe(stepId)
       expect(step.text).toBe('Fix the onboarding routing bug')
+      expect(step.completedAt).toBeNull()
     })
 
     it('trims outer whitespace while preserving internal whitespace and Unicode', () => {
@@ -78,6 +84,54 @@ describe('dailyStep domain', () => {
       const updated = updateDailyStep(original, 'Same text')
 
       expect(updated).toBe(original)
+    })
+
+    it('preserves completion when text changes', () => {
+      const original = { ...createDailyStep('Original step', NOW, 'ds_test1234567890'), completedAt: NOW }
+      const updated = updateDailyStep(original, 'New step')
+
+      expect(updated.completedAt).toBe(NOW)
+    })
+  })
+
+  describe('completion', () => {
+    it('recognizes incomplete and completed steps', () => {
+      const step = createDailyStep('Take action', NOW, 'ds_completion')
+      expect(isDailyStepCompleted(step)).toBe(false)
+      expect(isDailyStepCompleted(completeDailyStep(step, NOW))).toBe(true)
+    })
+
+    it('keeps the first timestamp when completed twice', () => {
+      const step = createDailyStep('Take action', NOW, 'ds_completion')
+      const completed = completeDailyStep(step, NOW)
+      expect(completeDailyStep(completed, '2026-10-01T10:00:00.000Z')).toBe(completed)
+    })
+
+    it('clears completion when uncompleted', () => {
+      const step = { ...createDailyStep('Take action', NOW, 'ds_completion'), completedAt: NOW }
+      const uncompleted = uncompleteDailyStep(step)
+      expect(uncompleted.completedAt).toBeNull()
+      expect(uncompleteDailyStep(uncompleted)).toBe(uncompleted)
+    })
+
+    it('validates completion timestamps', () => {
+      expect(isValidDailyStepCompletionTimestamp(NOW)).toBe(true)
+      expect(isValidDailyStepCompletionTimestamp('not a timestamp')).toBe(false)
+      expect(isValidDailyStepCompletionTimestamp(null)).toBe(false)
+    })
+  })
+
+  describe('v1 to v2 migration', () => {
+    it('adds incomplete completion state without changing identity, text, or order', () => {
+      const raw = [
+        { schemaVersion: 1, id: 'ds_first', text: 'First action' },
+        { schemaVersion: 1, id: 'ds_second', text: 'Second action' },
+      ]
+
+      expect(migrateDailyStepsV1ToV2(raw)).toEqual([
+        { schemaVersion: 2, id: 'ds_first', text: 'First action', completedAt: null },
+        { schemaVersion: 2, id: 'ds_second', text: 'Second action', completedAt: null },
+      ])
     })
   })
 
@@ -138,22 +192,26 @@ describe('dailyStep domain', () => {
     })
 
     it('normalizes persisted text without truncating meaningful content', () => {
-      const raw = [{ schemaVersion: 1, id: 'ds_one', text: '  Use emoji ��� and punctuation!  ' }]
+      const raw = [{ schemaVersion: 2, id: 'ds_one', text: '  Use emoji ��� and punctuation!  ', completedAt: null }]
       expect(normalizeDailySteps(raw)).toEqual([
-        { schemaVersion: 1, id: 'ds_one', text: 'Use emoji ��� and punctuation!' },
+        { schemaVersion: 2, id: 'ds_one', text: 'Use emoji ��� and punctuation!', completedAt: null },
       ])
     })
 
     it('rejects blank and over-length persisted text', () => {
-      expect(normalizeDailySteps([{ schemaVersion: 1, id: 'ds_one', text: '   ' }])).toBeNull()
-      expect(normalizeDailySteps([{ schemaVersion: 1, id: 'ds_one', text: 'a'.repeat(MAX_DAILY_STEP_LENGTH + 1) }])).toBeNull()
+      expect(normalizeDailySteps([{ schemaVersion: 2, id: 'ds_one', text: '   ', completedAt: null }])).toBeNull()
+      expect(normalizeDailySteps([{ schemaVersion: 2, id: 'ds_one', text: 'a'.repeat(MAX_DAILY_STEP_LENGTH + 1), completedAt: null }])).toBeNull()
+    })
+
+    it('rejects malformed completion timestamps', () => {
+      expect(normalizeDailySteps([{ schemaVersion: 2, id: 'ds_one', text: 'Action', completedAt: 'later' }])).toBeNull()
     })
   })
 
   describe('hasNewerDailyStepsSchema', () => {
     it('detects a future schema without adopting it', () => {
       const step = createDailyStep('Future action', NOW, 'ds_future')
-      expect(hasNewerDailyStepsSchema([{ ...step, schemaVersion: 2 }])).toBe(true)
+      expect(hasNewerDailyStepsSchema([{ ...step, schemaVersion: 3 }])).toBe(true)
       expect(hasNewerDailyStepsSchema([step])).toBe(false)
       expect(hasNewerDailyStepsSchema(null)).toBe(false)
     })

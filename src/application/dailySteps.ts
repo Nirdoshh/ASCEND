@@ -19,7 +19,19 @@ import type { DailyStepsRepository } from '../data/repositories/dailyStepsReposi
 import type { DailyPlanRepository } from '../data/repositories/dailyPlanRepository'
 import type { TodayWinRepository } from '../data/repositories/todayWinRepository'
 import type { JourneyRepository } from '../data/repositories/journeyRepository'
-import { createDailyStepId, createDailyStep, updateDailyStep, validateDailyStepText, validateDailyStepCount, isDuplicateDailyStep, isAtMaxDailySteps, type DailyStep } from '../domain/dailyStep'
+import {
+  completeDailyStep as markDailyStepComplete,
+  createDailyStep,
+  createDailyStepId,
+  isAtMaxDailySteps,
+  isDailyStepCompleted,
+  isDuplicateDailyStep,
+  type DailyStep,
+  uncompleteDailyStep as markDailyStepIncomplete,
+  updateDailyStep,
+  validateDailyStepCount,
+  validateDailyStepText,
+} from '../domain/dailyStep'
 import { createSystemLocalDateProvider } from '../domain/localDate'
 
 export type DailyStepsResult =
@@ -35,6 +47,7 @@ export type DailyStepsProblem =
   | 'too-many-steps'
   | 'step-not-found'
   | 'newer-steps-schema'
+  | 'invalid-data'
   | 'storage-unavailable'
   | 'unknown'
 
@@ -185,6 +198,83 @@ export async function editDailyStep(
     return { ok: false, problem: 'storage-unavailable', message: 'Could not save Daily Steps.' }
   }
 
+  return { ok: true, steps: updatedSteps }
+}
+
+/** Marks one existing Daily Step complete after the new list persists. */
+export async function completeDailyStep(
+  planRepository: DailyPlanRepository,
+  stepsRepository: DailyStepsRepository,
+  journeyRepository: JourneyRepository,
+  winRepository: TodayWinRepository,
+  stepId: string,
+  now: string = new Date().toISOString(),
+): Promise<DailyStepsResult> {
+  const journey = journeyRepository.loadActive()
+  if (!journey) return { ok: false, problem: 'no-journey', message: 'No active Journey exists.' }
+
+  const todayPlan = planRepository.loadForDate(journey.id, createSystemLocalDateProvider().today())
+  if (!todayPlan) return { ok: false, problem: 'no-daily-plan', message: 'No active DailyPlan exists.' }
+  if (!winRepository.loadForPlan(todayPlan.id)) {
+    return { ok: false, problem: 'no-today-win', message: 'Set Today\'s Win before completing steps.' }
+  }
+
+  const currentSteps = stepsRepository.loadForPlan(todayPlan.id)
+  const step = currentSteps.find((candidate) => candidate.id === stepId)
+  if (!step) return { ok: false, problem: 'step-not-found', message: 'Step not found.' }
+  if (isDailyStepCompleted(step)) return { ok: true, steps: currentSteps }
+
+  const updatedSteps = currentSteps.map((candidate) =>
+    candidate.id === stepId ? markDailyStepComplete(candidate, now) : candidate,
+  )
+  const saveResult = stepsRepository.save(todayPlan.id, updatedSteps)
+  if (saveResult === 'newer-schema') {
+    return { ok: false, problem: 'newer-steps-schema', message: 'A newer steps list exists.' }
+  }
+  if (saveResult === 'invalid-data') {
+    return { ok: false, problem: 'invalid-data', message: 'Could not safely update Daily Steps.' }
+  }
+  if (saveResult !== 'ok') {
+    return { ok: false, problem: 'storage-unavailable', message: 'Could not save Daily Steps.' }
+  }
+  return { ok: true, steps: updatedSteps }
+}
+
+/** Clears one existing Daily Step's completion after the new list persists. */
+export async function uncompleteDailyStep(
+  planRepository: DailyPlanRepository,
+  stepsRepository: DailyStepsRepository,
+  journeyRepository: JourneyRepository,
+  winRepository: TodayWinRepository,
+  stepId: string,
+): Promise<DailyStepsResult> {
+  const journey = journeyRepository.loadActive()
+  if (!journey) return { ok: false, problem: 'no-journey', message: 'No active Journey exists.' }
+
+  const todayPlan = planRepository.loadForDate(journey.id, createSystemLocalDateProvider().today())
+  if (!todayPlan) return { ok: false, problem: 'no-daily-plan', message: 'No active DailyPlan exists.' }
+  if (!winRepository.loadForPlan(todayPlan.id)) {
+    return { ok: false, problem: 'no-today-win', message: 'Set Today\'s Win before changing steps.' }
+  }
+
+  const currentSteps = stepsRepository.loadForPlan(todayPlan.id)
+  const step = currentSteps.find((candidate) => candidate.id === stepId)
+  if (!step) return { ok: false, problem: 'step-not-found', message: 'Step not found.' }
+  if (!isDailyStepCompleted(step)) return { ok: true, steps: currentSteps }
+
+  const updatedSteps = currentSteps.map((candidate) =>
+    candidate.id === stepId ? markDailyStepIncomplete(candidate) : candidate,
+  )
+  const saveResult = stepsRepository.save(todayPlan.id, updatedSteps)
+  if (saveResult === 'newer-schema') {
+    return { ok: false, problem: 'newer-steps-schema', message: 'A newer steps list exists.' }
+  }
+  if (saveResult === 'invalid-data') {
+    return { ok: false, problem: 'invalid-data', message: 'Could not safely update Daily Steps.' }
+  }
+  if (saveResult !== 'ok') {
+    return { ok: false, problem: 'storage-unavailable', message: 'Could not save Daily Steps.' }
+  }
   return { ok: true, steps: updatedSteps }
 }
 

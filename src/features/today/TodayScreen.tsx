@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ScreenHeader } from '../../app/ScreenHeader'
-import { addDailyStep, editDailyStep, loadDailySteps, removeDailyStep } from '../../application/dailySteps'
+import {
+  addDailyStep,
+  completeDailyStep,
+  editDailyStep,
+  loadDailySteps,
+  removeDailyStep,
+  uncompleteDailyStep,
+} from '../../application/dailySteps'
 import { getOrCreateTodayPlan } from '../../application/todayPlan'
 import { loadTodayWin, setTodayWin } from '../../application/todayWin'
 import { Button, Card, EmptyState, ErrorState, Icon, Skeleton, TextField } from '../../components/ui'
@@ -13,7 +20,7 @@ import {
   defaultTodayWinRepository,
 } from '../../data/repositories/defaults'
 import type { DailyPlan } from '../../domain/dailyPlan'
-import type { DailyStep } from '../../domain/dailyStep'
+import { isDailyStepCompleted, type DailyStep } from '../../domain/dailyStep'
 import type { Journey } from '../../domain/journey'
 import type { TodayWin } from '../../domain/todayWin'
 import './TodayScreen.css'
@@ -36,9 +43,11 @@ export function TodayScreen() {
   const [winStatus, setWinStatus] = useState<SaveStatus>('idle')
   const [editStepText, setEditStepText] = useState('')
   const [editStepError, setEditStepError] = useState<string | undefined>()
+  const [completionError, setCompletionError] = useState<string | undefined>()
   const [stepStatus, setStepStatus] = useState<SaveStatus>('idle')
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [stepDraftText, setStepDraftText] = useState('')
+  const [completionSavingStepId, setCompletionSavingStepId] = useState<string | null>(null)
   const [isEditingWin, setIsEditingWin] = useState(false)
 
   useEffect(() => {
@@ -143,6 +152,35 @@ export function TodayScreen() {
       setStepStatus('saved')
     } else {
       setEditStepError(result.message)
+      setStepStatus('idle')
+    }
+  }
+
+  const handleToggleStep = async (step: DailyStep, completed: boolean) => {
+    setCompletionError(undefined)
+    setCompletionSavingStepId(step.id)
+    const result = completed
+      ? await completeDailyStep(
+          defaultDailyPlanRepository,
+          defaultDailyStepsRepository,
+          defaultJourneyRepository,
+          defaultTodayWinRepository,
+          step.id,
+        )
+      : await uncompleteDailyStep(
+          defaultDailyPlanRepository,
+          defaultDailyStepsRepository,
+          defaultJourneyRepository,
+          defaultTodayWinRepository,
+          step.id,
+        )
+
+    setCompletionSavingStepId(null)
+    if (result.ok) {
+      setSteps(result.steps)
+      setStepStatus('saved')
+    } else {
+      setCompletionError(result.message)
       setStepStatus('idle')
     }
   }
@@ -269,8 +307,22 @@ export function TodayScreen() {
                     <p className="today__step-count">{steps.length} of 4 steps</p>
                     <ol className="today__step-list">
                       {steps.map((step, index) => (
-                        <li className="today__step-row" key={step.id}>
-                          <span className="today__step-number" aria-hidden="true">{index + 1}</span>
+                        <li className={`today__step-row${isDailyStepCompleted(step) ? ' today__step-row--completed' : ''}`} key={step.id}>
+                          <div className="today__step-leading">
+                            <span className="today__step-number" aria-hidden="true">{index + 1}</span>
+                            <label className="today__step-completion">
+                              <input
+                                type="checkbox"
+                                checked={isDailyStepCompleted(step)}
+                                disabled={completionSavingStepId === step.id}
+                                onChange={(event) => void handleToggleStep(step, event.target.checked)}
+                                aria-label={`${isDailyStepCompleted(step) ? 'Mark' : 'Complete'} step ${index + 1}: ${step.text}`}
+                              />
+                              <span className="today__step-check-icon" aria-hidden="true">
+                                {isDailyStepCompleted(step) ? <Icon name="check" size={18} /> : null}
+                              </span>
+                            </label>
+                          </div>
                           {editingStepId === step.id ? (
                             <div className="today__step-main">
                               <TextField
@@ -298,6 +350,10 @@ export function TodayScreen() {
                         </li>
                       ))}
                     </ol>
+                    {steps.length > 0 && steps.every(isDailyStepCompleted) ? (
+                      <p className="today__complete-ack" role="status">Today&rsquo;s steps are complete.</p>
+                    ) : null}
+                    {completionError ? <p className="today__step-error" role="alert">{completionError}</p> : null}
                   </>
                 ) : null}
 
