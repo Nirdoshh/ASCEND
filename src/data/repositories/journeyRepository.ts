@@ -10,10 +10,13 @@
 import { normalizeJourney, hasNewerJourneySchema, type Journey } from '../../domain/journey'
 import { ASCEND_JOURNEY_KEY } from '../storage/keys'
 import type { KeyValueStore, StoreWriteResult } from '../storage/webStorageStore'
+import type { RepositoryReadResult } from './readResult'
 
 export type JourneyRepositoryWriteResult = StoreWriteResult | 'newer-schema' | 'already-exists'
 
 export interface JourneyRepository {
+  /** Explicit read for consumers that must distinguish absence from failure. */
+  readActive(): RepositoryReadResult<Journey | null>
   /** The active Journey, or null when there is none. */
   loadActive(): Journey | null
   /**
@@ -28,6 +31,20 @@ export interface JourneyRepository {
 
 export function createJourneyRepository(store: KeyValueStore): JourneyRepository {
   return {
+    readActive() {
+      const raw = store.readResult(ASCEND_JOURNEY_KEY)
+      if (!raw.ok) return raw
+      if (raw.value === null) return { ok: true, value: null }
+      if (hasNewerJourneySchema(raw.value)) return { ok: false, problem: 'newer-schema' }
+      const journey = normalizeJourney(raw.value, nowIso())
+      // Progress must not invent the Journey start date from a fallback clock.
+      const startedAt = (raw.value as Record<string, unknown>).startedAt
+      if (!journey || typeof startedAt !== 'string' || Number.isNaN(Date.parse(startedAt))) {
+        return { ok: false, problem: 'invalid-data' }
+      }
+      return { ok: true, value: journey }
+    },
+
     loadActive(): Journey | null {
       const raw = store.read(ASCEND_JOURNEY_KEY)
       if (!raw) return null

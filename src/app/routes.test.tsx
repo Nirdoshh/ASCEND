@@ -1,5 +1,8 @@
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { progressJourney } from '../test/progressFixtures'
+import { ASCEND_JOURNEY_KEY } from '../data/storage/keys'
 
 /**
  * Route smoke test.
@@ -40,6 +43,33 @@ async function renderAt(path: string) {
 }
 
 describe('routes', () => {
+  it('keeps Today in the shared shell and supports keyboard navigation to Progress and back', async () => {
+    window.localStorage.setItem(ASCEND_JOURNEY_KEY, JSON.stringify(progressJourney()))
+    await renderAt('/today')
+    await screen.findByRole('heading', { name: 'Today', level: 1 })
+    const nav = await screen.findByRole('navigation', { name: 'Main' })
+    expect(nav).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main')
+    const user = userEvent.setup()
+    screen.getByRole('link', { name: /^Progress/ }).focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Progress', level: 1 })
+    expect(screen.getByRole('link', { name: /^Progress/ })).toHaveAttribute('aria-current', 'page')
+    screen.getByRole('link', { name: /^Today/ }).focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Today', level: 1 })
+    expect(screen.getByRole('link', { name: /^Today/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('cold-loads Progress for an active Journey without creating a plan', async () => {
+    window.localStorage.setItem(ASCEND_JOURNEY_KEY, JSON.stringify(progressJourney()))
+    await renderAt('/progress')
+    await screen.findByRole('heading', { name: 'Progress', level: 1 })
+    expect(screen.getByText('No completed actions yet')).toBeInTheDocument()
+    expect(Object.keys(window.localStorage).filter(key => key.startsWith('ascend:daily-plan:'))).toEqual([])
+  })
+
   const cases = [
     /*
      * Root and /today redirect to onboarding when no Journey exists.

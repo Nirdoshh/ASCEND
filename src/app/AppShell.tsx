@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import type { ReactNode } from 'react'
 
 import { AppHeader } from '../components/layout/AppHeader'
 import { PrimaryNav } from '../components/layout/PrimaryNav'
@@ -25,11 +26,11 @@ import './AppShell.css'
  * so the skip link can move focus into it programmatically. Without
  * that, Safari in particular will scroll but not move focus.
  */
-export function AppShell() {
+export function AppShell({ children }: { children?: ReactNode }) {
   return (
     <RouteErrorBoundary>
       <a className="skip-link" href="#main">
-        Skip to today&rsquo;s plan
+        Skip to main content
       </a>
 
       <div className="app-shell">
@@ -43,7 +44,7 @@ export function AppShell() {
             See the note above about why focus, not just scroll.
           */}
           <main className="app-shell__main" id="main" tabIndex={-1}>
-            <Outlet />
+            {children ?? <Outlet />}
           </main>
         </div>
 

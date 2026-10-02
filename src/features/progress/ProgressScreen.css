@@ -1,0 +1,91 @@
+.progress-screen {
+  max-inline-size: var(--content-max);
+  margin-inline: auto;
+}
+
+.progress-screen .screen-header {
+  margin-block-end: var(--space-0);
+}
+
+.progress-screen__actions {
+  padding-block: var(--space-4);
+}
+
+.progress-screen__actions h2 {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+.progress-screen__count {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  margin-block: var(--space-3);
+}
+
+.progress-screen__consistency {
+  font-weight: var(--weight-medium);
+  margin-block-end: var(--space-2);
+}
+
+.progress-history {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+  list-style: none;
+  padding: var(--space-0);
+  margin-block: var(--space-5);
+}
+
+.progress-history__day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  min-inline-size: 0;
+}
+
+.progress-history__day--active {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+.progress-history__weekday,
+.progress-history__day time {
+  font-size: var(--text-xs);
+}
+
+.progress-history__ratio {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.progress-screen__journey {
+  border-block-start: 1px solid var(--border-subtle);
+  padding-block-start: var(--space-6);
+}
+
+.progress-screen__journey h2 {
+  font-size: var(--text-base);
+}
+
+.progress-screen__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-medium);
+  text-underline-offset: var(--space-1);
+}
+
+@media (max-width: 30rem) {
+  .progress-history {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

@@ -23,7 +23,15 @@
 
 export type StoreWriteResult = 'ok' | 'quota-exceeded' | 'unavailable'
 
+/** Explicit, non-destructive reads for historical aggregation. */
+export type StoreReadResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly problem: 'storage-unavailable' | 'invalid-data' }
+
 export interface KeyValueStore {
+  readResult(key: string): StoreReadResult<unknown | null>
+  /** Only matching keys are returned; values are read separately. */
+  keysWithPrefix(prefix: string): StoreReadResult<string[]>
   /** Returns the parsed value, or null if absent, unreadable or corrupt. */
   read(key: string): unknown | null
   write(key: string, value: unknown): StoreWriteResult
@@ -51,6 +59,41 @@ export function createWebStorageStore(
   return {
     isAvailable: () => available,
 
+    readResult(key) {
+      if (!storage) return { ok: false, problem: 'storage-unavailable' }
+      let raw: string | null
+      try {
+        raw = storage.getItem(key)
+      } catch {
+        return { ok: false, problem: 'storage-unavailable' }
+      }
+      if (raw === null) return { ok: true, value: null }
+      try {
+        const value: unknown = JSON.parse(raw)
+        // JSON null is a stored malformed record, not an absent key.
+        return value === null
+          ? { ok: false, problem: 'invalid-data' }
+          : { ok: true, value }
+      } catch {
+        // Preserve the original bytes for recovery by the user/newer builds.
+        return { ok: false, problem: 'invalid-data' }
+      }
+    },
+
+    keysWithPrefix(prefix) {
+      if (!storage) return { ok: false, problem: 'storage-unavailable' }
+      try {
+        const keys: string[] = []
+        for (let index = 0; index < storage.length; index++) {
+          const key = storage.key(index)
+          if (key?.startsWith(prefix)) keys.push(key)
+        }
+        return { ok: true, value: keys }
+      } catch {
+        return { ok: false, problem: 'storage-unavailable' }
+      }
+    },
+
     read(key: string): unknown | null {
       if (!storage) return null
 
@@ -67,20 +110,15 @@ export function createWebStorageStore(
       try {
         return JSON.parse(raw) as unknown
       } catch {
-        // Corrupt data is worse than no data: it can break the app on
-        // every load. We drop it and continue with defaults, and we log
-        // so the condition is visible in development.
+        // Do not expose malformed data to callers, but preserve its bytes.
+        // A route guard can read before a consumer's explicit readResult;
+        // removing it here would silently turn unreadable history into absence.
         //
         // This is one of the two places in ASCEND that writes to the
         // console. It is deliberate and local: `no-console` is on
         // everywhere else so that accidental logging is still visible.
         // eslint-disable-next-line no-console
-        console.warn(`[ascend] discarded corrupt value for key "${key}"`)
-        try {
-          storage.removeItem(key)
-        } catch {
-          // Nothing more we can do; the read path already returns null.
-        }
+        console.warn(`[ascend] could not read value for key "${key}"; original data preserved`)
         return null
       }
     },

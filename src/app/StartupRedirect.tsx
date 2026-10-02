@@ -108,9 +108,11 @@ export function TodayRedirect() {
   switch (destination.kind) {
     case 'today':
       return (
-        <Suspense fallback={null}>
-          <TodayScreen />
-        </Suspense>
+        <AppShell>
+          <Suspense fallback={null}>
+            <TodayScreen />
+          </Suspense>
+        </AppShell>
       )
     case 'onboarding':
     case 'onboarding-resume':

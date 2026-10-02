@@ -1,8 +1,45 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createWebStorageStore } from './webStorageStore'
 
 describe('webStorageStore', () => {
+  it('reads explicitly without destroying invalid JSON', () => {
+    window.localStorage.setItem('ascend:preserved', '{broken')
+    const store = createWebStorageStore()
+    expect(store.readResult('ascend:missing')).toEqual({ ok: true, value: null })
+    expect(store.readResult('ascend:preserved')).toEqual({ ok: false, problem: 'invalid-data' })
+    expect(window.localStorage.getItem('ascend:preserved')).toBe('{broken')
+    store.write('ascend:valid', { kept: true })
+    expect(store.readResult('ascend:valid')).toEqual({ ok: true, value: { kept: true } })
+  })
+
+  it('only enumerates matching keys without reading unrelated values', () => {
+    window.localStorage.setItem('ascend:history:one', '{}')
+    window.localStorage.setItem('unrelated:key', '{broken')
+    const store = createWebStorageStore()
+    const read = vi.spyOn(Storage.prototype, 'getItem')
+    expect(store.keysWithPrefix('ascend:history:')).toEqual({ ok: true, value: ['ascend:history:one'] })
+    expect(read).not.toHaveBeenCalled()
+    read.mockRestore()
+  })
+
+  it('reports storage that becomes unavailable during a read or enumeration', () => {
+    const store = createWebStorageStore()
+    const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    expect(store.readResult('ascend:history')).toEqual({ ok: false, problem: 'storage-unavailable' })
+    read.mockRestore()
+    const keys = vi.spyOn(Storage.prototype, 'key').mockImplementation(() => { throw new Error('blocked') })
+    window.localStorage.setItem('ascend:history', '{}')
+    expect(store.keysWithPrefix('ascend:')).toEqual({ ok: false, problem: 'storage-unavailable' })
+    keys.mockRestore()
+  })
+
+  it('reports explicit reads and enumeration unavailable when storage is absent', () => {
+    const store = createWebStorageStore(null)
+    expect(store.readResult('ascend:history')).toEqual({ ok: false, problem: 'storage-unavailable' })
+    expect(store.keysWithPrefix('ascend:')).toEqual({ ok: false, problem: 'storage-unavailable' })
+  })
+
   it('round-trips a value', () => {
     const store = createWebStorageStore()
 
@@ -16,15 +53,15 @@ describe('webStorageStore', () => {
     expect(store.read('ascend:missing')).toBeNull()
   })
 
-  it('discards corrupt JSON instead of throwing', () => {
+  it('preserves corrupt JSON while returning null instead of throwing', () => {
     // This is the important one. A half-written value from a crashed
     // tab must not be able to break every future page load.
     window.localStorage.setItem('ascend:broken', '{not valid json')
     const store = createWebStorageStore()
 
     expect(store.read('ascend:broken')).toBeNull()
-    // The bad value is removed so the next load is clean.
-    expect(window.localStorage.getItem('ascend:broken')).toBeNull()
+    // Keep the original bytes for recovery, including reads by route guards.
+    expect(window.localStorage.getItem('ascend:broken')).toBe('{not valid json')
   })
 
   it('removes a key', () => {

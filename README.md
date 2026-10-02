@@ -9,14 +9,15 @@ more meaningful action in real life.
 
 ## Status
 
-Phase 2C complete: onboarding asks for Growth Areas, a Goal, a WHY, a Duration, a
-few Milestones and a realistic Daily Effort.
+Phase 3E complete: onboarding creates a Journey; Today supports a DailyPlan,
+Today's Win, Daily Steps and explicit Step completion. The UI Foundation is in
+place. Progress now derives recorded actions, seven-day activity and Journey
+calendar time from existing records, without persisting counters or claiming
+personal improvement. See [Progress foundation](docs/progress-foundation.md) for
+exact definitions, validation and remaining limitations.
 
-Not yet built: the summary step and the act of creating a Journey, Today's plan,
-completion, scoring, Journey, Progress, Daily Review, Recovery. The four main
-screens exist with honest empty states rather than fake data, and onboarding stops
-at the Daily Effort question and says so plainly rather than pretending the plan
-is finished.
+Growth Points / Phase 3F have not started. The Journey and You screens still have
+their existing placeholders; Daily Review and Recovery are not implemented.
 
 | Phase | Scope | State |
 |---|---|---|
@@ -25,8 +26,11 @@ is finished.
 | 2A | Onboarding: welcome + Growth Areas | **Done** |
 | 2B | Onboarding: Goal + WHY | **Done** |
 | 2C | Onboarding: duration, milestones, daily effort | **Done** |
-| 2D | Onboarding: summary + Journey creation | Not started |
-| 3 | Today system | Not started |
+| 2D | Onboarding: summary + Journey creation | **Done** |
+| 3A–3D | DailyPlan, Today's Win, Daily Steps, completion | **Done** |
+| UI Foundation | Shared visual language and accessibility | **Done** |
+| 3E | Derived Progress foundation | **Done** |
+| 3F | Growth Points | Not started |
 
 ## Requirements
 
@@ -176,7 +180,8 @@ WCAG 2.2 AA is the target, treated as a requirement rather than a pass at the en
 
 ## Testing
 
-75 tests, run with `npm test`.
+940 tests, run with `npm test`. The Phase 3E changes add 84 tests for Progress,
+safe historical reads, local calendar arithmetic and real-router navigation.
 
 - **Storage** — corrupt JSON, blocked storage, quota exhaustion
 - **Preferences** — migration, validation, unknown future versions

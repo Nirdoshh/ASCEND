@@ -22,7 +22,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   {
-    to: '/',
+    to: '/today',
     label: 'Today',
     icon: 'today',
     description: 'What should I do right now?',
@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
     to: '/progress',
     label: 'Progress',
     icon: 'progress',
-    description: 'Am I actually improving?',
+    description: 'Have I actually been taking action?',
   },
   {
     to: '/you',
@@ -63,9 +63,8 @@ export function PrimaryNav() {
             <NavLink
               to={item.to}
               // NavLink sets aria-current="page" for the active route.
-              // `end` is required on "/" or it matches every route and
-              // Today would appear selected on Journey.
-              end={item.to === '/'}
+              // The root redirects to /today; match its canonical screen URL.
+              end={item.to === '/today'}
               className={({ isActive }) =>
                 `primary-nav__link${isActive ? ' primary-nav__link--active' : ''}`
               }

@@ -14,10 +14,13 @@ import {
   type DailyStep,
 } from '../../domain/dailyStep'
 import type { KeyValueStore, StoreWriteResult } from '../storage/webStorageStore'
+import type { RepositoryReadResult } from './readResult'
 
 export type DailyStepsRepositoryWriteResult = StoreWriteResult | 'newer-schema' | 'invalid-data'
 
 export interface DailyStepsRepository {
+  /** Missing lists are empty; malformed/future lists are reported, preserved. */
+  readForPlan(dailyPlanId: string): RepositoryReadResult<DailyStep[]>
   /** Loads the steps for a specific daily plan, or empty array if none exist. */
   loadForPlan(dailyPlanId: string): DailyStep[]
   /** Saves the entire steps list for a daily plan. */
@@ -29,6 +32,17 @@ export interface DailyStepsRepository {
 
 export function createDailyStepsRepository(store: KeyValueStore): DailyStepsRepository {
   return {
+    readForPlan(dailyPlanId) {
+      const raw = store.readResult(dailyStepsStorageKey(dailyPlanId))
+      if (!raw.ok) return raw
+      if (raw.value === null) return { ok: true, value: [] }
+      if (hasNewerDailyStepsSchema(raw.value)) return { ok: false, problem: 'newer-schema' }
+      const steps = normalizeDailySteps(migrateDailyStepsV1ToV2(raw.value))
+      return steps === null
+        ? { ok: false, problem: 'invalid-data' }
+        : { ok: true, value: steps }
+    },
+
     loadForPlan(dailyPlanId: string): DailyStep[] {
       const key = dailyStepsStorageKey(dailyPlanId)
       const raw = store.read(key)

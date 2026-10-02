@@ -28,10 +28,14 @@
 import { normalizeDailyPlan, hasNewerDailyPlanSchema, type DailyPlan } from '../../domain/dailyPlan'
 import { dailyPlanStorageKey } from '../../domain/dailyPlan'
 import type { KeyValueStore, StoreWriteResult } from '../storage/webStorageStore'
+import { isValidLocalDate } from '../../domain/localDate'
+import type { RepositoryReadResult } from './readResult'
 
 export type DailyPlanRepositoryWriteResult = StoreWriteResult | 'newer-schema'
 
 export interface DailyPlanRepository {
+  /** Read-only history, ordered by saved local date. Never rewrites data. */
+  listForJourney(journeyId: string): RepositoryReadResult<DailyPlan[]>
   /** Loads the plan for a specific journey and date, or null if none exists. */
   loadForDate(journeyId: string, localDate: string): DailyPlan | null
   /**
@@ -49,6 +53,29 @@ export interface DailyPlanRepository {
 
 export function createDailyPlanRepository(store: KeyValueStore): DailyPlanRepository {
   return {
+    listForJourney(journeyId) {
+      const prefix = dailyPlanStorageKey(journeyId, '')
+      const keys = store.keysWithPrefix(prefix)
+      if (!keys.ok) return keys
+      const plans: DailyPlan[] = []
+      const ids = new Set<string>()
+      for (const key of keys.value) {
+        const raw = store.readResult(key)
+        if (!raw.ok) return raw
+        if (raw.value === null) continue // Removed between enumeration and read.
+        if (hasNewerDailyPlanSchema(raw.value)) return { ok: false, problem: 'newer-schema' }
+        const plan = normalizeDailyPlan(raw.value, nowIso())
+        if (!plan || plan.journeyId !== journeyId || !isValidLocalDate(plan.localDate)
+          || dailyPlanStorageKey(journeyId, plan.localDate) !== key || ids.has(plan.id)) {
+          return { ok: false, problem: 'invalid-data' }
+        }
+        ids.add(plan.id)
+        plans.push(plan)
+      }
+      plans.sort((a, b) => a.localDate.localeCompare(b.localDate))
+      return { ok: true, value: plans }
+    },
+
     loadForDate(journeyId: string, localDate: string): DailyPlan | null {
       const key = dailyPlanStorageKey(journeyId, localDate)
       const raw = store.read(key)

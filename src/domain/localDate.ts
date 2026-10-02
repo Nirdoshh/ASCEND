@@ -37,23 +37,7 @@ export interface LocalDateProvider {
 export function createSystemLocalDateProvider(): LocalDateProvider {
   return {
     today(): LocalDate {
-      // Get the user's timezone from the browser
-      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-      const now = new Date()
-
-      // Format the date in the user's local timezone
-      // This handles DST transitions correctly
-      const formatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      })
-      const parts = formatter.formatToParts(now)
-      const year = parts.find((p) => p.type === 'year')?.value ?? '1970'
-      const month = parts.find((p) => p.type === 'month')?.value ?? '01'
-      const day = parts.find((p) => p.type === 'day')?.value ?? '01'
-      return `${year}-${month}-${day}`
+      return localDateFromTimestamp(new Date().toISOString())
     },
   }
 }
@@ -89,7 +73,8 @@ export function isValidLocalDate(value: unknown): value is LocalDate {
   if (month < 1 || month > 12) return false
   if (day < 1 || day > 31) return false
   // Check actual calendar validity
-  const date = new Date(Date.UTC(year, month - 1, day))
+  const date = new Date(0)
+  date.setUTCFullYear(year, month - 1, day)
   // Date constructor handles invalid dates by rolling over, so check components match
   return (
     date.getUTCFullYear() === year &&
@@ -119,7 +104,7 @@ export function parseLocalDate(date: LocalDate): { year: number; month: number; 
 export function createLocalDate(year: number, month: number, day: number): LocalDate {
   const monthStr = String(month).padStart(2, '0')
   const dayStr = String(day).padStart(2, '0')
-  return `${year}-${monthStr}-${dayStr}`
+  return `${String(year).padStart(4, '0')}-${monthStr}-${dayStr}`
 }
 
 /**
@@ -137,4 +122,36 @@ export function compareLocalDate(a: LocalDate, b: LocalDate): number {
  */
 export function isSameLocalDate(a: LocalDate, b: LocalDate): boolean {
   return a === b
+}
+
+/** Converts an instant only when necessary (Journey start), never saved plan dates. */
+export function localDateFromTimestamp(
+  timestamp: string,
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): LocalDate {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(timestamp))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value
+  return `${part('year')?.padStart(4, '0')}-${part('month')}-${part('day')}`
+}
+
+/** UTC is used as calendar arithmetic, not as a timezone conversion. */
+function calendarDate(localDate: LocalDate): Date {
+  const parts = parseLocalDate(localDate)
+  if (!parts) throw new RangeError('Invalid local calendar date')
+  const date = new Date(0)
+  date.setUTCFullYear(parts.year, parts.month - 1, parts.day)
+  return date
+}
+
+export function addLocalDays(localDate: LocalDate, days: number): LocalDate {
+  const date = calendarDate(localDate)
+  date.setUTCDate(date.getUTCDate() + days)
+  return createLocalDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate())
+}
+
+/** Calendar boundaries crossed; unaffected by 23/25-hour DST days. */
+export function localDaysBetween(start: LocalDate, end: LocalDate): number {
+  return (calendarDate(end).getTime() - calendarDate(start).getTime()) / 86_400_000
 }

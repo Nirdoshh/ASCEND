@@ -15,7 +15,7 @@ import { PrimaryNav } from './PrimaryNav'
  *   2. Rendering separate mobile and desktop navs would double the
  *      links a screen reader walks through.
  */
-function renderNav(initialPath = '/') {
+function renderNav(initialPath = '/today') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
       <PrimaryNav />
@@ -41,8 +41,8 @@ describe('PrimaryNav', () => {
     expect(today).not.toHaveAttribute('aria-current', 'page')
   })
 
-  it('marks Today as current on / but not on other routes', () => {
-    const { unmount } = renderNav('/')
+  it('marks Today as current on /today but not on other routes', () => {
+    const { unmount } = renderNav('/today')
     expect(screen.getByRole('link', { name: /today/i })).toHaveAttribute('aria-current', 'page')
     unmount()
 
@@ -66,7 +66,7 @@ describe('PrimaryNav', () => {
 
   it('navigates when activated', async () => {
     const user = userEvent.setup()
-    renderNav('/')
+    renderNav('/today')
 
     await user.click(screen.getByRole('link', { name: /journey/i }))
 
